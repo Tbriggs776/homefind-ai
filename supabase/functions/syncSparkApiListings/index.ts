@@ -18,15 +18,17 @@ serve(async (req) => {
       .eq('cache_key', 'spark_last_sync')
       .single();
 
-    const lastSync = cache?.cache_value?.timestamp || '1970-01-01T00:00:00Z';
+    const lastSync = cache?.cache_value?.timestamp || '';
     const syncStartTime = new Date().toISOString();
     let totalSynced = 0;
     let skipToken = '';
     let page = 0;
 
     while (page < MAX_PAGES) {
-      let url = `${SPARK_API_BASE}/listings?_limit=1000&_orderby=ModificationTimestamp&_filter=ModificationTimestamp gt datetime'${lastSync}'&_expand=Photos`;
-      if (skipToken) url += `&_skiptoken=${skipToken}`;
+      let url = `${SPARK_API_BASE}/listings?_limit=1000&_orderby=ModificationTimestamp&_expand=Photos`;
+if (lastSync !== '1970-01-01T00:00:00Z') {
+  url += `&_filter=ModificationTimestamp Gt ${lastSync}`;
+}
 
       const sparkRes = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
