@@ -44,71 +44,48 @@ serve(async (req) => {
       const listings = sparkData?.D?.Results || [];
       if (listings.length === 0) break;
 
-      const rows = listings.map((l: any) => ({
-        listing_key: l.ListingKey || l.Id,
-        listing_id: l.ListingId || l.ListNumber,
-        mls_status: l.MlsStatus || l.StandardStatus || 'Active',
-        property_type: l.PropertyType,
-        property_sub_type: l.PropertySubType,
-        street_number: l.StreetNumber,
-        street_name: l.StreetName,
-        street_suffix: l.StreetSuffix,
-        unit_number: l.UnitNumber,
-        city: l.City,
-        state: l.StateOrProvince || 'AZ',
-        zip_code: l.PostalCode,
-        county: l.CountyOrParish,
-        subdivision: l.SubdivisionName,
-        list_price: parseFloat(l.ListPrice) || null,
-        original_list_price: parseFloat(l.OriginalListPrice) || null,
-        beds: parseInt(l.BedroomsTotal) || null,
-        baths_full: parseInt(l.BathroomsFull) || null,
-        baths_half: parseInt(l.BathroomsHalf) || null,
-        baths_total: parseFloat(l.BathroomsTotalDecimal) || null,
-        sqft: parseInt(l.LivingArea) || null,
-        lot_size_sqft: parseFloat(l.LotSizeSquareFeet) || null,
-        lot_size_acres: parseFloat(l.LotSizeAcres) || null,
-        year_built: parseInt(l.YearBuilt) || null,
-        days_on_market: parseInt(l.DaysOnMarket) || null,
-        listing_date: l.ListingContractDate || null,
-        description: l.PublicRemarks,
-        latitude: parseFloat(l.Latitude) || null,
-        longitude: parseFloat(l.Longitude) || null,
-        photos: (l.Photos || []).map((p: any) => ({
-          uri_300: p.Uri300, uri_640: p.Uri640, uri_800: p.Uri800,
-          uri_1024: p.Uri1024, uri_1280: p.Uri1280,
-          caption: p.Caption, primary: p.Primary,
-        })),
-        photo_count: l.PhotosCount || (l.Photos || []).length,
-        primary_photo: (l.Photos || []).find((p: any) => p.Primary)?.Uri640 || (l.Photos || [])[0]?.Uri640 || null,
-        virtual_tour_url: l.VirtualTourURLUnbranded || l.VirtualTourURLBranded || null,
-        garage_spaces: parseInt(l.GarageSpaces) || null,
-        pool: l.PoolPrivateYN === true || l.PoolFeatures?.length > 0 || false,
-        stories: parseInt(l.Stories) || null,
-        hoa_fee: parseFloat(l.AssociationFee) || null,
-        hoa_frequency: l.AssociationFeeFrequency || null,
-        heating: Array.isArray(l.Heating) ? l.Heating.join(', ') : l.Heating,
-        cooling: Array.isArray(l.Cooling) ? l.Cooling.join(', ') : l.Cooling,
-        school_district: l.SchoolDistrict,
-        elementary_school: l.ElementarySchool,
-        middle_school: l.MiddleSchool,
-        high_school: l.HighSchool,
-        listing_office_name: l.ListOfficeName,
-        listing_office_phone: l.ListOfficePhone,
-        listing_agent_name: l.ListAgentFullName || `${l.ListAgentFirstName || ''} ${l.ListAgentLastName || ''}`.trim(),
-        listing_agent_id: l.ListAgentMlsId,
-        listing_agent_email: l.ListAgentEmail,
-        modification_timestamp: l.ModificationTimestamp,
-        status_change_timestamp: l.StatusChangeTimestamp,
-        is_featured: false,
-        raw_data: l,
-      }));
+      // Map Spark fields to ACTUAL database columns
+      const rows = listings.map((l: any) => {
+        const streetParts = [l.StreetNumber, l.StreetName, l.StreetSuffix].filter(Boolean).join(' ');
+        const unitPart = l.UnitNumber ? `, Unit ${l.UnitNumber}` : '';
+        const address = `${streetParts}${unitPart}`;
+
+        return {
+          mls_number: l.ListingKey || l.Id || l.ListingId,
+          status: l.MlsStatus || l.StandardStatus || 'Active',
+          property_type: l.PropertyType,
+          address: address,
+          city: l.City,
+          state: l.StateOrProvince || 'AZ',
+          zip_code: l.PostalCode,
+          county: l.CountyOrParish,
+          subdivision: l.SubdivisionName,
+          price: parseFloat(l.ListPrice) || null,
+          bedrooms: parseInt(l.BedroomsTotal) || null,
+          bathrooms: parseFloat(l.BathroomsTotalDecimal || l.BathroomsFull) || null,
+          square_feet: parseInt(l.LivingArea) || null,
+          lot_size: parseFloat(l.LotSizeSquareFeet) || null,
+          year_built: parseInt(l.YearBuilt) || null,
+          days_on_market: parseInt(l.DaysOnMarket) || null,
+          listing_date: l.ListingContractDate || null,
+          description: l.PublicRemarks,
+          latitude: parseFloat(l.Latitude) || null,
+          longitude: parseFloat(l.Longitude) || null,
+          virtual_tour_url: l.VirtualTourURLUnbranded || l.VirtualTourURLBranded || null,
+          garage_spaces: parseInt(l.GarageSpaces) || null,
+          hoa_fee: parseFloat(l.AssociationFee) || null,
+          elementary_school: l.ElementarySchool,
+          middle_school: l.MiddleSchool,
+          high_school: l.HighSchool,
+          is_featured: false,
+        };
+      });
 
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
         const { error } = await supabaseAdmin
           .from('properties')
-          .upsert(batch, { onConflict: 'listing_key' });
+          .upsert(batch, { onConflict: 'mls_number' });
         if (error) throw error;
         totalSynced += batch.length;
       }
