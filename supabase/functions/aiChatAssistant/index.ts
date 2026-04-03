@@ -1,174 +1,79 @@
-import { getServiceClient, getUser, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { supabaseAdmin, corsHeaders } from '../_shared/supabaseAdmin.ts';
 
-interface ChatRequest {
-  message: string;
-  image?: string; // base64 encoded image
-  model?: 'gpt-4o' | 'gpt-4o-mini';
-}
-
-interface ChatResponse {
-  response: string;
-  filters?: Record<string, unknown>;
-}
-
-async function callOpenAI(
-  messages: unknown[],
-  systemPrompt: string,
-  model: string = 'gpt-4o-mini'
-): Promise<string> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages,
-      ],
-      temperature: 0.7,
-      max_tokens: 1000,
-    }),
-  });
-
-  const data = await response.json();
-  return data.choices[0].message.content;
-}
-
-async function extractSearchFilters(userMessage: string, admin: ReturnType<typeof getServiceClient>) {
-  const filterExtractPrompt = `Extract search filters from this user message. Return JSON with fields like: price_range, location, property_type, beds, baths, etc.
-Message: "${userMessage}"
-Return ONLY valid JSON.`;
-
-  const result = await callOpenAI(
-    [{ role: 'user', content: filterExtractPrompt }],
-    'You are a real estate search filter extraction assistant.'
-  );
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    return JSON.parse(result);
-  } catch {
-    return {};
-  }
-}
+    const { message, userId, conversationHistory = [] } = await req.json();
+    const openaiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openaiKey) throw new Error('OPENAI_API_KEY not set');
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+    // Build system prompt with property search context
+    const systemPrompt = `You are a helpful real estate assistant for Crandell Real Estate Team / Balboa Realty, serving the Phoenix metro area (ARMLS listings).
+You help users find properties, understand neighborhoods, and answer real estate questions.
+When users describe what they're looking for, extract search filters and return them as JSON in a code block.
 
-  try {
-    const user = await getUser(req);
-    if (!user) {
-      return jsonResponse({ error: 'Unauthorized' }, 401);
-    }
+Available filters: city, zip_code, min_price, max_price, min_beds, max_beds, min_baths, max_baths, min_sqft, max_sqft, property_type, pool, subdivision.
 
-    const { message, image, model = 'gpt-4o-mini' } = (await req.json()) as ChatRequest;
+Example: If someone says "3 bedroom homes in Gilbert under 500k with a pool", respond with helpful context AND:
+\`\`\`json
+{"city": "Gilbert", "min_beds": 3, "max_price": 500000, "pool": true}
+\`\`\`
 
-    if (!message) {
-      return jsonResponse({ error: 'Missing message' }, 400);
-    }
+Be conversational, knowledgeable about Arizona real estate, and always helpful. If you don't know something specific, say so honestly.`;
 
-    const admin = getServiceClient();
-
-    // Fetch user context
-    const [savedPropsRes, prefsRes, viewsRes] = await Promise.all([
-      admin
-        .from('saved_properties')
-        .select('*, properties(*)')
-        .eq('user_id', user.id)
-        .limit(10),
-      admin
-        .from('search_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .single(),
-      admin
-        .from('property_views')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5),
-    ]);
-
-    const savedProps = (savedPropsRes.data || []).map((sp: Record<string, unknown>) => sp.properties);
-    const prefs = prefsRes.data || {};
-    const views = viewsRes.data || [];
-
-    // Build context
-    const context = `
-User Profile:
-- Saved Properties: ${savedProps.length} properties
-- Search Preferences: ${JSON.stringify(prefs)}
-- Recent Views: ${views.length} properties viewed recently
-
-Recent Properties Viewed:
-${views.map((v: Record<string, unknown>) => `- ${v.property_id} (${new Date(v.created_at as string).toLocaleDateString()})`).join('\n')}
-`;
-
-    // Extract filters from user message
-    const filters = await extractSearchFilters(message, admin);
-
-    // Build messages for OpenAI
-    const contentArray: unknown[] = [
-      {
-        type: 'text',
-        text: message,
-      },
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...conversationHistory.slice(-10),
+      { role: 'user', content: message },
     ];
 
-    // Add image if provided and using gpt-4o
-    if (image && model === 'gpt-4o') {
-      contentArray.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:image/jpeg;base64,${image}`,
-          detail: 'low',
-        },
-      });
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages,
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!openaiRes.ok) {
+      const errText = await openaiRes.text();
+      throw new Error(`OpenAI error: ${errText}`);
     }
 
-    const systemPrompt = `You are a helpful real estate assistant. Use the user context to provide personalized recommendations and advice.
+    const openaiData = await openaiRes.json();
+    const reply = openaiData.choices?.[0]?.message?.content || 'I apologize, I had trouble processing that. Could you try again?';
 
-${context}
+    // Extract filters from response if present
+    let filters = null;
+    const jsonMatch = reply.match(/```json\n?([\s\S]*?)\n?```/);
+    if (jsonMatch) {
+      try { filters = JSON.parse(jsonMatch[1]); } catch (_) { /* ignore parse errors */ }
+    }
 
-Help the user find properties, answer questions about the market, and provide insights.`;
+    // Save chat message if userId provided
+    if (userId) {
+      await supabaseAdmin.from('chat_messages').insert([
+        { user_id: userId, role: 'user', content: message },
+        { user_id: userId, role: 'assistant', content: reply, metadata: filters ? { filters } : null },
+      ]);
+    }
 
-    const response = await callOpenAI(
-      [
-        {
-          role: 'user',
-          content: contentArray,
-        },
-      ],
-      systemPrompt,
-      model
+    return new Response(
+      JSON.stringify({ reply, filters }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
-    // Save chat message
-    await admin.from('chat_messages').insert({
-      user_id: user.id,
-      role: 'user',
-      content: message,
-      filters,
-      created_at: new Date().toISOString(),
-    });
-
-    await admin.from('chat_messages').insert({
-      user_id: user.id,
-      role: 'assistant',
-      content: response,
-      created_at: new Date().toISOString(),
-    });
-
-    return jsonResponse({
-      response,
-      filters,
-    } as ChatResponse);
-  } catch (error) {
-    console.error('Error:', error);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 });

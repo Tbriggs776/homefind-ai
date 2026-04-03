@@ -33,6 +33,12 @@ export async function getUser(req: Request) {
   return profile ? { ...profile, auth_id: user.id } : null;
 }
 
+// Convenience: direct admin client export
+export const supabaseAdmin = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+);
+
 // Standard CORS headers for edge functions
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

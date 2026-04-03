@@ -1,45 +1,37 @@
-import { getServiceClient, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
 
-Deno.serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const supabase = getServiceClient();
+    const { limit = 12 } = await req.json().catch(() => ({}));
 
-    // Fetch featured properties for the specific agent
-    const { data: properties, error: propertiesError } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('properties')
       .select('*')
-      .eq('list_agent_mls_id', 'pc295')
-      .eq('status', 'active')
-      .order('price', { ascending: false })
-      .limit(50);
+      .eq('mls_status', 'Active')
+      .eq('is_featured', true)
+      .order('list_price', { ascending: false })
+      .limit(limit);
 
-    if (propertiesError) {
-      return jsonResponse(
-        { error: 'Failed to fetch properties', details: propertiesError },
-        400
-      );
+    if (error) throw error;
+
+    // If not enough featured, fill with recent listings
+    if (!data || data.length < limit) {
+      const { data: recent } = await supabaseAdmin
+        .from('properties')
+        .select('*')
+        .eq('mls_status', 'Active')
+        .order('listing_date', { ascending: false })
+        .limit(limit - (data?.length || 0));
+      const combined = [...(data || []), ...(recent || [])];
+      const unique = [...new Map(combined.map(p => [p.id, p])).values()];
+      return jsonResponse({ listings: unique.slice(0, limit) });
     }
 
-    // Map to response with is_featured flag
-    const mappedProperties = (properties || []).map((prop: any) => ({
-      ...prop,
-      is_featured: true,
-    }));
-
-    return jsonResponse({
-      properties: mappedProperties,
-      total_active_listings: '38,000+',
-    });
-  } catch (error) {
-    console.error('Error in getFeaturedListings:', error);
-    return jsonResponse(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
-      500
-    );
+    return jsonResponse({ listings: data });
+  } catch (err) {
+    return jsonResponse({ error: err.message }, 500);
   }
 });

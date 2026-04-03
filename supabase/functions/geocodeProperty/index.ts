@@ -1,63 +1,45 @@
-import { getServiceClient, getUser, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
 
-Deno.serve(async (req) => {
-    if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-    try {
-        const admin = getServiceClient();
-        const user = await getUser(req);
+  try {
+    const { propertyId } = await req.json();
+    if (!propertyId) throw new Error('propertyId required');
 
-        if (!user || user.role !== 'admin') {
-            return jsonResponse({ error: 'Forbidden: Admin access required' }, 403);
-        }
+    const { data: property } = await supabaseAdmin
+      .from('properties')
+      .select('street_number, street_name, street_suffix, city, state, zip_code')
+      .eq('id', propertyId)
+      .single();
 
-        const { address, city, state, zip_code } = await req.json();
+    if (!property) throw new Error('Property not found');
 
-        if (!address || !city || !state) {
-            return jsonResponse({ error: 'Missing required fields: address, city, state' }, 400);
-        }
+    const address = `${property.street_number || ''} ${property.street_name || ''} ${property.street_suffix || ''}, ${property.city || ''}, ${property.state || 'AZ'} ${property.zip_code || ''}`.trim();
 
-        const fullAddress = `${address}, ${city}, ${state} ${zip_code || ''}`.trim();
+    const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+    const geoRes = await fetch(geocodeUrl, {
+      headers: { 'User-Agent': 'HomeFind-AI/1.0' },
+    });
 
-        const encodedAddress = encodeURIComponent(fullAddress);
-        const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${encodedAddress}&format=json&limit=1`,
-            {
-                headers: {
-                    'User-Agent': 'HomeFinder Property App'
-                }
-            }
-        );
+    if (!geoRes.ok) throw new Error('Geocoding service error');
 
-        if (!response.ok) {
-            return jsonResponse({
-                error: 'Geocoding service error',
-                status: response.status
-            }, 500);
-        }
+    const geoData = await geoRes.json();
+    if (!geoData.length) return jsonResponse({ success: false, message: 'No geocode result' });
 
-        const data = await response.json();
+    const lat = parseFloat(geoData[0].lat);
+    const lon = parseFloat(geoData[0].lon);
 
-        if (!Array.isArray(data) || data.length === 0) {
-            return jsonResponse({
-                error: 'Address not found',
-                address: fullAddress
-            }, 404);
-        }
+    const { error } = await supabaseAdmin
+      .from('properties')
+      .update({ latitude: lat, longitude: lon })
+      .eq('id', propertyId);
 
-        const location = data[0];
+    if (error) throw error;
 
-        return jsonResponse({
-            success: true,
-            latitude: parseFloat(location.lat),
-            longitude: parseFloat(location.lon),
-            display_name: location.display_name
-        });
-
-    } catch (error) {
-        return jsonResponse({
-            error: (error as Error).message,
-            stack: (error as Error).stack
-        }, 500);
-    }
+    return jsonResponse({ success: true, latitude: lat, longitude: lon });
+  } catch (err) {
+    return jsonResponse({ error: err.message }, 500);
+  }
 });

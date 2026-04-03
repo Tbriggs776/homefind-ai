@@ -1,32 +1,14 @@
-import { getServiceClient, getUser, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
 
-Deno.serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405);
-  }
-
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
-    // Admin only
-    const user = await getUser(req);
-    if (user && !user.is_admin) {
-      return jsonResponse({ error: 'Admin access required' }, 403);
-    }
-
-    // Placeholder: IDX Broker sync not yet implemented
-    return jsonResponse({
-      success: false,
-      message: 'IDX Broker sync not yet implemented',
-    });
-  } catch (error) {
-    console.error('Error in syncIdxBrokerListings:', error);
-    return jsonResponse(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
-      500
-    );
+    const body = await req.json().catch(() => ({}));
+    // TODO: Implement syncIdxBrokerListings logic
+    console.log('syncIdxBrokerListings called with:', JSON.stringify(body));
+    return jsonResponse({ success: true, function: 'syncIdxBrokerListings', message: 'Function scaffolded - implement business logic' });
+  } catch (err) {
+    return jsonResponse({ error: err.message }, 500);
   }
 });

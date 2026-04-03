@@ -1,302 +1,131 @@
-import { getServiceClient, getUser, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
 
-interface SparkListing {
-  [key: string]: any;
-}
+const SPARK_API_BASE = 'https://replication.sparkapi.com/v1';
+const BATCH_SIZE = 500;
+const MAX_PAGES = 100;
 
-interface PropertyData {
-  [key: string]: any;
-}
-
-// Helper function to map property type
-function mapPropertyType(sparkType: string): string {
-  const typeMap: Record<string, string> = {
-    'Residential': 'single_family',
-    'Residential Income': 'multi_family',
-    'Condo/Townhouse/Row House/Coach House': 'condo',
-    'Land': 'land',
-    'Commercial': 'commercial',
-    'Vacant Land': 'land',
-  };
-  return typeMap[sparkType] || sparkType || 'unknown';
-}
-
-// Helper function to map status
-function mapStatus(sparkStatus: string): string {
-  const statusMap: Record<string, string> = {
-    'Active': 'active',
-    'Active With Contingencies': 'active_contingency',
-    'Pending': 'pending',
-    'Under Contract': 'pending',
-    'Closed': 'sold',
-    'Expired': 'expired',
-    'Withdrawn': 'withdrawn',
-    'Back On Market': 'active',
-  };
-  return statusMap[sparkStatus] || sparkStatus?.toLowerCase() || 'active';
-}
-
-// Extract features from listing
-function extractFeatures(listing: SparkListing): string[] {
-  const features: string[] = [];
-
-  if (listing.PoolFeature === 'Yes' || listing.PoolFeature === true) features.push('pool');
-  if (listing.GarageSpaces && parseInt(listing.GarageSpaces) > 0) features.push('garage');
-  if (listing.WaterfrontFeature === 'Yes' || listing.WaterfrontFeature === true) features.push('waterfront');
-  if (listing.FireplaceNumber && parseInt(listing.FireplaceNumber) > 0) features.push('fireplace');
-  if (listing.Basement === 'Yes' || listing.Basement === true) features.push('basement');
-  if (listing.SolarPowerSystem === 'Yes') features.push('solar');
-  if (listing.HotTubSpaSpa === 'Yes' || listing.HotTubSpaSpa === true) features.push('spa');
-  if (listing.View === 'Water View' || listing.View === 'Mountain View') features.push('view');
-  if (listing.RVParking === 'Yes' || listing.RVParking === true) features.push('rv_parking');
-
-  return features;
-}
-
-// Build property data from Spark listing
-function buildPropertyData(listing: SparkListing): PropertyData {
-  const data: PropertyData = {
-    external_listing_id: listing.ListingKey || listing.Id,
-    mls_number: listing.ListingKey || listing.Id,
-    address: listing.UnparsedAddress || `${listing.StreetNumber || ''} ${listing.StreetName || ''}`.trim(),
-    city: listing.City,
-    state: listing.StateOrProvince,
-    zip_code: listing.PostalCode,
-    county: listing.County,
-    subdivision: listing.SubdivisionName,
-    lat: listing.Latitude ? parseFloat(listing.Latitude) : null,
-    lng: listing.Longitude ? parseFloat(listing.Longitude) : null,
-    price: listing.ListPrice ? parseInt(listing.ListPrice) : null,
-    beds: listing.BedroomsTotal ? parseInt(listing.BedroomsTotal) : null,
-    baths: listing.BathroomsTotalInteger ? parseFloat(listing.BathroomsTotalInteger) : null,
-    sqft: listing.LivingArea ? parseInt(listing.LivingArea) : null,
-    lot_size: listing.LotSizeAcres ? parseFloat(listing.LotSizeAcres) : null,
-    year_built: listing.YearBuilt ? parseInt(listing.YearBuilt) : null,
-    property_type: mapPropertyType(listing.PropertyType),
-    features: extractFeatures(listing),
-    images: (listing.Photos || []).map((photo: any) => ({
-      url: photo.MediaURL || photo.url,
-      caption: photo.Caption || '',
-    })),
-    status: mapStatus(listing.ListingStatus),
-    list_price: listing.ListPrice ? parseInt(listing.ListPrice) : null,
-    list_date: listing.ListingContractDate || listing.ListDate,
-    days_on_market: listing.DaysOnMarket ? parseInt(listing.DaysOnMarket) : null,
-    private_pool: listing.PoolPrivateYN === true || listing.PoolPrivateYN === 'Y',
-    rv_garage: listing.RVParking === 'Yes' || listing.RVParking === true,
-    single_story: listing.Stories === 1 || listing.Stories === '1',
-    horse_property: listing.AnimalFacilities === 'Horses' || listing.AnimalFacilities?.includes('Horse'),
-    corner_lot: listing.LotPosition === 'Corner' || listing.LotPosition?.includes('Corner'),
-    cul_de_sac: listing.LotPosition === 'Cul de Sac' || listing.LotPosition?.includes('Cul de Sac'),
-    waterfront: listing.WaterfrontFeature === 'Yes' || listing.WaterfrontFeature === true,
-    golf_course_lot: listing.LotPosition?.includes('Golf Course'),
-    community_pool: listing.PoolFeature === 'Community',
-    gated_community: listing.CommunityFeatures?.includes('Gated') || listing.GatedCommunity === 'Y',
-    hoa_required: listing.AssociationFeeFreq ? true : false,
-    age_restricted_55plus: listing.AgeRestricted === '55+' || listing.AgeRestricted === true,
-    casita_guest_house: listing.RoomType?.includes('Casita') || listing.RoomType?.includes('Guest House'),
-    office_den: listing.OfficeNook === 'Yes' || listing.DenOfficeLibrary === 'Yes',
-    basement: listing.Basement === 'Yes' || listing.Basement === true,
-    open_floor_plan: listing.OpenPorch === 'Yes' || listing.OpenPorch === true,
-    recently_remodeled: listing.RemodelYear ? (new Date().getFullYear() - parseInt(listing.RemodelYear) < 5) : false,
-    energy_efficient: listing.GreenIndication === 'Yes' || listing.GreenIndication === true,
-    solar_owned: listing.SolarPowerSystem === 'Yes' && listing.SolarPowerSystemCompanyName?.length > 0,
-    solar_leased: listing.SolarPowerSystem === 'Leased',
-    spa_hot_tub: listing.HotTubSpaSpa === 'Yes' || listing.HotTubSpaSpa === true,
-    has_view: listing.View && listing.View !== 'None',
-    is_featured: listing.isFeatured || false,
-    open_house_date: listing.OpenHouseDate,
-    open_house_end: listing.OpenHouseEndDateTime,
-    open_house_remarks: listing.OpenHouseRemarks,
-    schools: listing.ElementarySchool ? [listing.ElementarySchool, listing.MiddleSchool, listing.HighSchool].filter(Boolean) : [],
-    updated_at: new Date().toISOString(),
-  };
-
-  // Filter out null/undefined values
-  return Object.fromEntries(
-    Object.entries(data).filter(([_, v]) => v !== null && v !== undefined)
-  );
-}
-
-// Retry with exponential backoff
-async function fetchWithRetry(
-  url: string,
-  headers: Record<string, string>,
-  maxRetries = 3
-): Promise<Response> {
-  let lastError;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const response = await fetch(url, { method: 'GET', headers });
-      if (response.status === 429) {
-        const waitTime = Math.pow(2, i) * 1000;
-        console.log(`Rate limited, waiting ${waitTime}ms before retry ${i + 1}`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-      return response;
-    } catch (error) {
-      lastError = error;
-      const waitTime = Math.pow(2, i) * 1000;
-      console.log(`Fetch error, retrying in ${waitTime}ms:`, error);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-  }
-  throw lastError;
-}
-
-Deno.serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405);
-  }
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // Admin only or automation
-    const user = await getUser(req);
-    if (user && !user.is_admin) {
-      return jsonResponse({ error: 'Admin access required' }, 403);
-    }
+    const accessToken = Deno.env.get('SPARK_OAUTH_ACCESS_TOKEN');
+    if (!accessToken) throw new Error('SPARK_OAUTH_ACCESS_TOKEN not set');
 
-    const supabase = getServiceClient();
-    const sparkAccessToken = Deno.env.get('SPARK_OAUTH_ACCESS_TOKEN');
-
-    if (!sparkAccessToken) {
-      return jsonResponse(
-        { error: 'Spark API token not configured' },
-        400
-      );
-    }
-
-    // Load cursor from sync_cache table
-    const { data: cacheEntry } = await supabase
+    const { data: cache } = await supabaseAdmin
       .from('sync_cache')
-      .select('value')
-      .eq('key', 'spark_api_pagination')
+      .select('cache_value')
+      .eq('cache_key', 'spark_last_sync')
       .single();
 
-    let cursor = cacheEntry?.value || null;
-    const cursorFrom = cursor;
+    const lastSync = cache?.cache_value?.timestamp || '1970-01-01T00:00:00Z';
+    const syncStartTime = new Date().toISOString();
+    let totalSynced = 0;
+    let skipToken = '';
+    let page = 0;
 
-    // Fetch listings modified since last sync
-    let query = 'https://api.sparkplatform.com/v1/listings?pageSize=500&_filter=ListModificationTimestamp>=';
+    while (page < MAX_PAGES) {
+      let url = `${SPARK_API_BASE}/listings?_limit=1000&_orderby=ModificationTimestamp&_filter=ModificationTimestamp gt datetime'${lastSync}'&_expand=Photos`;
+      if (skipToken) url += `&_skiptoken=${skipToken}`;
 
-    if (!cursor) {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      cursor = thirtyDaysAgo.toISOString().split('T')[0];
+      const sparkRes = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      });
+
+      if (!sparkRes.ok) {
+        const errText = await sparkRes.text();
+        throw new Error(`Spark API error ${sparkRes.status}: ${errText}`);
+      }
+
+      const sparkData = await sparkRes.json();
+      const listings = sparkData?.D?.Results || [];
+      if (listings.length === 0) break;
+
+      const rows = listings.map((l: any) => ({
+        listing_key: l.ListingKey || l.Id,
+        listing_id: l.ListingId || l.ListNumber,
+        mls_status: l.MlsStatus || l.StandardStatus || 'Active',
+        property_type: l.PropertyType,
+        property_sub_type: l.PropertySubType,
+        street_number: l.StreetNumber,
+        street_name: l.StreetName,
+        street_suffix: l.StreetSuffix,
+        unit_number: l.UnitNumber,
+        city: l.City,
+        state: l.StateOrProvince || 'AZ',
+        zip_code: l.PostalCode,
+        county: l.CountyOrParish,
+        subdivision: l.SubdivisionName,
+        list_price: parseFloat(l.ListPrice) || null,
+        original_list_price: parseFloat(l.OriginalListPrice) || null,
+        beds: parseInt(l.BedroomsTotal) || null,
+        baths_full: parseInt(l.BathroomsFull) || null,
+        baths_half: parseInt(l.BathroomsHalf) || null,
+        baths_total: parseFloat(l.BathroomsTotalDecimal) || null,
+        sqft: parseInt(l.LivingArea) || null,
+        lot_size_sqft: parseFloat(l.LotSizeSquareFeet) || null,
+        lot_size_acres: parseFloat(l.LotSizeAcres) || null,
+        year_built: parseInt(l.YearBuilt) || null,
+        days_on_market: parseInt(l.DaysOnMarket) || null,
+        listing_date: l.ListingContractDate || null,
+        description: l.PublicRemarks,
+        latitude: parseFloat(l.Latitude) || null,
+        longitude: parseFloat(l.Longitude) || null,
+        photos: (l.Photos || []).map((p: any) => ({
+          uri_300: p.Uri300, uri_640: p.Uri640, uri_800: p.Uri800,
+          uri_1024: p.Uri1024, uri_1280: p.Uri1280,
+          caption: p.Caption, primary: p.Primary,
+        })),
+        photo_count: l.PhotosCount || (l.Photos || []).length,
+        primary_photo: (l.Photos || []).find((p: any) => p.Primary)?.Uri640 || (l.Photos || [])[0]?.Uri640 || null,
+        virtual_tour_url: l.VirtualTourURLUnbranded || l.VirtualTourURLBranded || null,
+        garage_spaces: parseInt(l.GarageSpaces) || null,
+        pool: l.PoolPrivateYN === true || l.PoolFeatures?.length > 0 || false,
+        stories: parseInt(l.Stories) || null,
+        hoa_fee: parseFloat(l.AssociationFee) || null,
+        hoa_frequency: l.AssociationFeeFrequency || null,
+        heating: Array.isArray(l.Heating) ? l.Heating.join(', ') : l.Heating,
+        cooling: Array.isArray(l.Cooling) ? l.Cooling.join(', ') : l.Cooling,
+        school_district: l.SchoolDistrict,
+        elementary_school: l.ElementarySchool,
+        middle_school: l.MiddleSchool,
+        high_school: l.HighSchool,
+        listing_office_name: l.ListOfficeName,
+        listing_office_phone: l.ListOfficePhone,
+        listing_agent_name: l.ListAgentFullName || `${l.ListAgentFirstName || ''} ${l.ListAgentLastName || ''}`.trim(),
+        listing_agent_id: l.ListAgentMlsId,
+        listing_agent_email: l.ListAgentEmail,
+        modification_timestamp: l.ModificationTimestamp,
+        status_change_timestamp: l.StatusChangeTimestamp,
+        is_featured: false,
+        raw_data: l,
+      }));
+
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        const { error } = await supabaseAdmin
+          .from('properties')
+          .upsert(batch, { onConflict: 'listing_key' });
+        if (error) throw error;
+        totalSynced += batch.length;
+      }
+
+      skipToken = sparkData?.D?.Pagination?.['@odata.nextLink']
+        ? new URL(sparkData.D.Pagination['@odata.nextLink']).searchParams.get('_skiptoken') || ''
+        : '';
+      if (!skipToken) break;
+      page++;
     }
 
-    query += cursor;
+    await supabaseAdmin.from('sync_cache').upsert({
+      cache_key: 'spark_last_sync',
+      cache_value: { timestamp: syncStartTime, listings_synced: totalSynced },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'cache_key' });
 
-    let totalFetched = 0;
-    let newListings = 0;
-    let updatedListings = 0;
-    let skipped = 0;
-    let cursorTo = cursor;
-
-    const headers = {
-      'Authorization': `Bearer ${sparkAccessToken}`,
-      'Content-Type': 'application/json',
-    };
-
-    let hasMore = true;
-    let pageUrl = query;
-
-    while (hasMore) {
-      const response = await fetchWithRetry(pageUrl, headers);
-
-      if (!response.ok) {
-        console.error('Spark API error:', response.status, await response.text());
-        return jsonResponse(
-          { error: `Spark API error: ${response.status}` },
-          400
-        );
-      }
-
-      const data = await response.json();
-      const listings: SparkListing[] = data.D?.Results || data.listings || [];
-
-      if (listings.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      // Process listings batch
-      for (const listing of listings) {
-        try {
-          const propertyData = buildPropertyData(listing);
-
-          if (!propertyData.external_listing_id) {
-            skipped++;
-            continue;
-          }
-
-          // Upsert using external_listing_id
-          const { error: upsertError, data: upsertData } = await supabase
-            .from('properties')
-            .upsert(propertyData, { onConflict: 'external_listing_id' });
-
-          if (upsertError) {
-            console.error('Upsert error for listing', propertyData.external_listing_id, upsertError);
-            skipped++;
-          } else {
-            totalFetched++;
-            if (upsertData && upsertData.length > 0) {
-              newListings++;
-            } else {
-              updatedListings++;
-            }
-          }
-
-          // Update cursor
-          if (listing.ListModificationTimestamp) {
-            cursorTo = listing.ListModificationTimestamp;
-          }
-        } catch (error) {
-          console.error('Error processing listing:', error);
-          skipped++;
-        }
-      }
-
-      // Check for next page
-      const nextLink = data.D?.Links?.find((l: any) => l.rel === 'next');
-      if (nextLink && nextLink.href) {
-        pageUrl = nextLink.href;
-      } else {
-        hasMore = false;
-      }
-    }
-
-    // Save cursor after batch
-    const { error: cacheError } = await supabase
-      .from('sync_cache')
-      .upsert(
-        { key: 'spark_api_pagination', value: cursorTo },
-        { onConflict: 'key' }
-      );
-
-    if (cacheError) {
-      console.error('Failed to update cursor:', cacheError);
-    }
-
-    return jsonResponse({
-      success: true,
-      total_fetched: totalFetched,
-      new_listings: newListings,
-      updated_listings: updatedListings,
-      skipped,
-      cursor_from: cursorFrom,
-      cursor_to: cursorTo,
-    });
-  } catch (error) {
-    console.error('Error in syncSparkApiListings:', error);
-    return jsonResponse(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },
-      500
-    );
+    return jsonResponse({ success: true, synced: totalSynced, pages: page + 1 });
+  } catch (err) {
+    console.error('Sync error:', err);
+    return jsonResponse({ error: err.message }, 500);
   }
 });

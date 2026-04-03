@@ -1,77 +1,56 @@
-import { getServiceClient, getUser, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
 
-Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // Get authenticated user
-    const user = await getUser(req);
-    if (!user) {
-      return jsonResponse({ error: 'Unauthorized' }, 401);
+    const { userId, email, name } = await req.json();
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+
+    if (!resendKey) {
+      console.log('RESEND_API_KEY not set, skipping email');
+      return jsonResponse({ success: true, skipped: true, reason: 'No email provider configured' });
     }
 
-    // Check if welcome email has already been sent
-    if (user.welcome_email_sent) {
-      return jsonResponse({
-        success: false,
-        message: 'Welcome email has already been sent',
-      });
-    }
+    const firstName = name?.split(' ')[0] || 'there';
 
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    if (!resendApiKey) {
-      return jsonResponse({ error: 'Resend API key not configured' }, 500);
-    }
-
-    // Send welcome email via Resend
-    const emailResponse = await fetch('https://api.resend.com/emails', {
+    const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendKey}` },
       body: JSON.stringify({
-        from: 'Crandell Home Intelligence <noreply@crandellhomeintelligence.com>',
-        to: [user.email],
-        subject: 'Welcome to Crandell Home Intelligence',
+        from: 'Crandell Real Estate <noreply@crandellrealestate.com>',
+        to: [email],
+        subject: `Welcome to HomeFind AI, ${firstName}!`,
         html: `
-          <h1>Welcome ${user.full_name || 'to Crandell Home Intelligence'}</h1>
-          <p>We're excited to have you on board. Your account is now active and ready to use.</p>
-          <p>If you have any questions, feel free to reach out to our support team.</p>
-          <p>Best regards,<br>The Crandell Home Intelligence Team</p>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #1a365d;">Welcome to HomeFind AI!</h1>
+            <p>Hi ${firstName},</p>
+            <p>Thank you for joining the Crandell Real Estate Team's property search platform. Here's what you can do:</p>
+            <ul>
+              <li><strong>Search</strong> 38,000+ ARMLS listings with advanced filters</li>
+              <li><strong>Save</strong> your favorite properties and get alerts</li>
+              <li><strong>Compare</strong> properties side by side</li>
+              <li><strong>Chat</strong> with our AI assistant for personalized recommendations</li>
+            </ul>
+            <p><a href="https://crandellrealestate.com" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Start Searching</a></p>
+            <p style="color: #666; font-size: 12px;">Crandell Real Estate Team | Balboa Realty</p>
+          </div>
         `,
       }),
     });
 
-    if (!emailResponse.ok) {
-      const error = await emailResponse.json();
-      return jsonResponse(
-        { error: 'Failed to send welcome email', details: error },
-        500
-      );
+    if (!emailRes.ok) {
+      const errText = await emailRes.text();
+      throw new Error(`Email send failed: ${errText}`);
     }
 
-    // Update profile with welcome_email_sent = true
-    const admin = getServiceClient();
-    const { data, error } = await admin
-      .from('profiles')
-      .update({ welcome_email_sent: true })
-      .eq('id', user.id)
-      .select();
-
-    if (error) {
-      return jsonResponse({ error: error.message }, 500);
+    if (userId) {
+      await supabaseAdmin.from('profiles').update({ welcome_email_sent: true }).eq('id', userId);
     }
 
-    return jsonResponse({
-      success: true,
-      message: 'Welcome email sent successfully',
-      data,
-    });
+    return jsonResponse({ success: true });
   } catch (err) {
-    return jsonResponse({ error: (err as Error).message }, 500);
+    return jsonResponse({ error: err.message }, 500);
   }
 });

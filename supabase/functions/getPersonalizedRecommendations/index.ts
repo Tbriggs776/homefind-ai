@@ -1,151 +1,85 @@
-import { getServiceClient, getUser, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { supabaseAdmin, corsHeaders } from '../_shared/supabaseAdmin.ts';
 
-interface RecommendationResponse {
-  recommendations: Record<string, unknown>[];
-  reason: string;
-}
-
-async function callOpenAI(messages: unknown[], systemPrompt: string): Promise<string> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages,
-      ],
-      temperature: 0.7,
-      max_tokens: 1200,
-    }),
-  });
-
-  const data = await response.json();
-  return data.choices[0].message.content;
-}
-
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const user = await getUser(req);
-    if (!user) {
-      return jsonResponse({ error: 'Unauthorized' }, 401);
+    const { userId } = await req.json();
+    if (!userId) throw new Error('userId required');
+
+    // Get user's search preferences
+    const { data: prefs } = await supabaseAdmin
+      .from('search_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    // Get user's saved properties to learn preferences
+    const { data: saved } = await supabaseAdmin
+      .from('saved_properties')
+      .select('property_id')
+      .eq('user_id', userId);
+    const savedIds = saved?.map((s: any) => s.property_id) || [];
+
+    // Get recently viewed properties
+    const { data: viewed } = await supabaseAdmin
+      .from('property_views')
+      .select('property_id')
+      .eq('user_id', userId)
+      .order('viewed_at', { ascending: false })
+      .limit(20);
+    const viewedIds = viewed?.map((v: any) => v.property_id) || [];
+
+    // Build recommendation query based on preferences and behavior
+    let query = supabaseAdmin
+      .from('properties')
+      .select('*')
+      .eq('mls_status', 'Active')
+      .order('listing_date', { ascending: false })
+      .limit(20);
+
+    if (prefs) {
+      if (prefs.min_price) query = query.gte('list_price', prefs.min_price);
+      if (prefs.max_price) query = query.lte('list_price', prefs.max_price);
+      if (prefs.min_beds) query = query.gte('beds', prefs.min_beds);
+      if (prefs.min_baths) query = query.gte('baths_total', prefs.min_baths);
+      if (prefs.cities?.length) query = query.in('city', prefs.cities);
+      if (prefs.property_types?.length) query = query.in('property_type', prefs.property_types);
+      if (prefs.pool) query = query.eq('pool', true);
+    } else if (savedIds.length > 0) {
+      // Learn from saved properties — get avg price range and common cities
+      const { data: savedProps } = await supabaseAdmin
+        .from('properties')
+        .select('list_price, beds, city, property_type')
+        .in('id', savedIds.slice(0, 10));
+
+      if (savedProps?.length) {
+        const avgPrice = savedProps.reduce((s: number, p: any) => s + (p.list_price || 0), 0) / savedProps.length;
+        const minPrice = avgPrice * 0.7;
+        const maxPrice = avgPrice * 1.3;
+        query = query.gte('list_price', minPrice).lte('list_price', maxPrice);
+
+        const cities = [...new Set(savedProps.map((p: any) => p.city).filter(Boolean))];
+        if (cities.length) query = query.in('city', cities as string[]);
+      }
     }
 
-    const admin = getServiceClient();
+    // Exclude already saved and recently viewed
+    const excludeIds = [...new Set([...savedIds, ...viewedIds])];
+    if (excludeIds.length) query = query.not('id', 'in', `(${excludeIds.join(',')})`);
 
-    // Fetch user's property views, saved properties, and search preferences
-    const [viewsRes, savedPropsRes, prefsRes] = await Promise.all([
-      admin
-        .from('property_views')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(20),
-      admin
-        .from('saved_properties')
-        .select('*, properties(*)')
-        .eq('user_id', user.id),
-      admin
-        .from('search_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .single(),
-    ]);
+    const { data: recommendations, error } = await query;
+    if (error) throw error;
 
-    const views = viewsRes.data || [];
-    const savedProps = (savedPropsRes.data || []).map((sp: Record<string, unknown>) => sp.properties);
-    const prefs = prefsRes.data || {};
-
-    // Analyze patterns for LLM
-    const userBehavior = `
-User Search History:
-- Total views: ${views.length}
-- Saved properties: ${savedProps.length}
-- Preferences: ${JSON.stringify(prefs)}
-
-Recently Viewed:
-${views
-  .slice(0, 5)
-  .map((v: Record<string, unknown>) => `- Property ${v.property_id}: ${v.view_count} views`)
-  .join('\n')}
-
-Saved Properties Price Range: ${
-      savedProps.length > 0
-        ? `$${Math.min(...(savedProps.map((p: Record<string, unknown>) => p.price as number) || [0]))} - $${Math.max(...(savedProps.map((p: Record<string, unknown>) => p.price as number) || [0]))}`
-        : 'No saved properties'
-    }
-`;
-
-    const systemPrompt = `You are a real estate recommendation expert. Analyze the user's viewing patterns and preferences to identify key characteristics they value in properties. Based on this analysis, suggest the types of properties that would be a good fit.
-
-Respond with a JSON object containing:
-{
-  "reason": "explanation of patterns identified",
-  "keywords": ["keyword1", "keyword2"],
-  "min_price": number,
-  "max_price": number,
-  "preferred_beds": number,
-  "preferred_baths": number
-}`;
-
-    const analysisResult = await callOpenAI(
-      [
-        {
-          role: 'user',
-          content: `Based on this user behavior, what properties would they likely be interested in?\n${userBehavior}`,
-        },
-      ],
-      systemPrompt
+    return new Response(
+      JSON.stringify({ recommendations: recommendations || [] }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
-    let analysis;
-    try {
-      analysis = JSON.parse(analysisResult);
-    } catch {
-      analysis = {
-        reason: analysisResult,
-        keywords: [],
-      };
-    }
-
-    // Build query for recommended properties
-    let query = admin.from('properties').select('*');
-
-    // Filter by preferences
-    if (analysis.min_price) {
-      query = query.gte('price', analysis.min_price);
-    }
-    if (analysis.max_price) {
-      query = query.lte('price', analysis.max_price);
-    }
-    if (analysis.preferred_beds) {
-      query = query.eq('beds', analysis.preferred_beds);
-    }
-
-    // Exclude already saved/viewed
-    const viewedIds = views.map((v: Record<string, unknown>) => v.property_id as string);
-    const savedIds = savedProps.map((p: Record<string, unknown>) => p.id as string);
-    const excludeIds = [...viewedIds, ...savedIds];
-
-    if (excludeIds.length > 0) {
-      query = query.not('id', 'in', `(${excludeIds.join(',')})`);
-    }
-
-    const { data: recommendations } = await query.limit(10);
-
-    return jsonResponse({
-      recommendations: recommendations || [],
-      reason: analysis.reason || 'Based on your viewing history and preferences',
-    } as RecommendationResponse);
-  } catch (error) {
-    console.error('Error:', error);
-    return jsonResponse({ error: 'Internal server error' }, 500);
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 });
