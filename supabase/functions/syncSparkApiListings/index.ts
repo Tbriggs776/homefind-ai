@@ -44,25 +44,27 @@ serve(async (req) => {
       const listings = sparkData?.D?.Results || [];
       if (listings.length === 0) break;
 
-      // Map Spark fields to ACTUAL database columns
-      const rows = listings.map((l: any) => {
-        const streetParts = [l.StreetNumber, l.StreetName, l.StreetSuffix].filter(Boolean).join(' ');
+      // Spark API nests all fields under StandardFields
+      const rows = listings.map((listing: any) => {
+        const l = listing.StandardFields || listing;
+        const streetParts = [l.StreetNumber, l.StreetDirPrefix, l.StreetName, l.StreetSuffix].filter(Boolean).join(' ');
         const unitPart = l.UnitNumber ? `, Unit ${l.UnitNumber}` : '';
         const address = `${streetParts}${unitPart}`;
+        const primaryPhoto = (l.Photos || []).find((p: any) => p.Primary);
 
         return {
-          mls_number: l.ListingKey || l.Id || l.ListingId,
-          status: l.MlsStatus || l.StandardStatus || 'Active',
-          property_type: l.PropertyType,
+          mls_number: listing.Id || l.ListingKey || l.ListingId,
+          status: (l.MlsStatus || l.StandardStatus || 'Active').toLowerCase(),
+          property_type: l.PropertyType || l.PropertyTypeLabel,
           address: address,
-          city: l.City,
+          city: l.City || l.PostalCity,
           state: l.StateOrProvince || 'AZ',
           zip_code: l.PostalCode,
           county: l.CountyOrParish,
           subdivision: l.SubdivisionName,
-          price: parseFloat(l.ListPrice) || null,
-          bedrooms: parseInt(l.BedroomsTotal) || null,
-          bathrooms: parseFloat(l.BathroomsTotalDecimal || l.BathroomsFull) || null,
+          price: parseFloat(l.ListPrice || l.CurrentPrice) || null,
+          bedrooms: parseInt(l.BedsTotal || l.BedroomsPossible) || null,
+          bathrooms: parseFloat(l.BathsTotal || l.BathroomsTotalInteger) || null,
           square_feet: parseInt(l.LivingArea) || null,
           lot_size: parseFloat(l.LotSizeSquareFeet) || null,
           year_built: parseInt(l.YearBuilt) || null,
@@ -75,7 +77,7 @@ serve(async (req) => {
           garage_spaces: parseInt(l.GarageSpaces) || null,
           hoa_fee: parseFloat(l.AssociationFee) || null,
           elementary_school: l.ElementarySchool,
-          middle_school: l.MiddleSchool,
+          middle_school: l.MiddleOrJuniorSchool,
           high_school: l.HighSchool,
           is_featured: false,
         };
