@@ -21,13 +21,17 @@ serve(async (req) => {
     const lastSync = cache?.cache_value?.timestamp || '';
     const syncStartTime = new Date().toISOString();
     let totalSynced = 0;
+    let totalSkipped = 0;
     let skipToken = '';
     let page = 0;
 
     while (page < MAX_PAGES) {
-      let url = `${SPARK_API_BASE}/listings?_limit=1000&_orderby=ModificationTimestamp&_expand=Photos`;
+      // IDX COMPLIANCE: Only pull Active listings per ARMLS Rule 23.3.5
+      // Using Spark API _filter syntax for MlsStatus
+      let url = `${SPARK_API_BASE}/listings?_limit=1000&_filter=MlsStatus Eq 'Active'&_orderby=ModificationTimestamp&_expand=Photos`;
+
       if (lastSync) {
-        url += `&_filter=ModificationTimestamp bt ${lastSync},${syncStartTime}`;
+        url += `&_filter=ModificationTimestamp Gt ${lastSync},${syncStartTime}`;
       }
       if (skipToken) url += `&_skiptoken=${skipToken}`;
 
@@ -47,6 +51,14 @@ serve(async (req) => {
       // Spark API nests all fields under StandardFields
       const rows = listings.map((listing: any) => {
         const l = listing.StandardFields || listing;
+
+        // CLIENT-SIDE SAFETY NET: Double-check MlsStatus is Active
+        // Even with API filter, reject anything that isn't explicitly Active
+        const mlsStatus = l.MlsStatus || l.StandardStatus || '';
+        if (mlsStatus.toLowerCase() !== 'active') {
+          return null; // Skip non-active listings
+        }
+
         const streetParts = [l.StreetNumber, l.StreetDirPrefix, l.StreetName, l.StreetSuffix].filter(Boolean).join(' ');
         const unitPart = l.UnitNumber ? `, Unit ${l.UnitNumber}` : '';
         const address = `${streetParts}${unitPart}`;
@@ -54,7 +66,7 @@ serve(async (req) => {
 
         return {
           mls_number: listing.Id || l.ListingKey || l.ListingId,
-          status: (l.MlsStatus || l.StandardStatus || 'Active').toLowerCase(),
+          status: 'active', // Only Active listings reach this point
           property_type: l.PropertyType || l.PropertyTypeLabel,
           address: address,
           city: l.City || l.PostalCity,
@@ -80,16 +92,40 @@ serve(async (req) => {
           middle_school: l.MiddleOrJuniorSchool,
           high_school: l.HighSchool,
           is_featured: false,
-        };
-      });
 
-      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-        const batch = rows.slice(i, i + BATCH_SIZE);
-        const { error } = await supabaseAdmin
-          .from('properties')
-          .upsert(batch, { onConflict: 'mls_number' });
-        if (error) throw error;
-        totalSynced += batch.length;
+          // ===== ARMLS COMPLIANCE FIELDS (Rule 23.2.12) =====
+          // Must display listing firm name + agent email or phone on every listing
+          listing_office_name: l.ListOfficeName || l.ListOffice?.Name || null,
+          listing_office_mls_id: l.ListOfficeKey || l.ListOfficeMlsId || null,
+          listing_agent_name: l.ListAgentFullName || l.ListAgentName ||
+            [l.ListAgentFirstName, l.ListAgentLastName].filter(Boolean).join(' ') || null,
+          listing_agent_email: l.ListAgentEmail || null,
+          listing_agent_phone: l.ListAgentDirectPhone || l.ListAgentOfficePhone || l.ListAgentPreferredPhone || null,
+          listing_agent_mls_id: l.ListAgentKey || l.ListAgentMlsId || null,
+
+          // Photo data
+          primary_photo_url: primaryPhoto?.Uri300 || primaryPhoto?.UriLarge || primaryPhoto?.Uri || null,
+          photo_count: (l.Photos || []).length,
+
+          // Timestamps
+          modification_timestamp: l.ModificationTimestamp || null,
+          listing_key: listing.Id || l.ListingKey || null,
+        };
+      }).filter(Boolean); // Remove nulls (non-active listings that slipped through)
+
+      if (rows.length === 0) {
+        totalSkipped += listings.length;
+      } else {
+        totalSkipped += (listings.length - rows.length);
+
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+          const batch = rows.slice(i, i + BATCH_SIZE);
+          const { error } = await supabaseAdmin
+            .from('properties')
+            .upsert(batch, { onConflict: 'mls_number' });
+          if (error) throw error;
+          totalSynced += batch.length;
+        }
       }
 
       skipToken = sparkData?.D?.Pagination?.['@odata.nextLink']
@@ -99,13 +135,14 @@ serve(async (req) => {
       page++;
     }
 
+    // Update sync cache
     await supabaseAdmin.from('sync_cache').upsert({
       cache_key: 'spark_last_sync',
-      cache_value: { timestamp: syncStartTime, listings_synced: totalSynced },
+      cache_value: { timestamp: syncStartTime, listings_synced: totalSynced, listings_skipped: totalSkipped },
       updated_at: new Date().toISOString(),
     }, { onConflict: 'cache_key' });
 
-    return jsonResponse({ success: true, synced: totalSynced, pages: page + 1 });
+    return jsonResponse({ success: true, synced: totalSynced, skipped: totalSkipped, pages: page + 1 });
   } catch (err) {
     console.error('Sync error:', err);
     return jsonResponse({ error: err.message }, 500);
