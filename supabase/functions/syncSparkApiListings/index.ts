@@ -26,9 +26,10 @@ serve(async (req) => {
 
     while (page < MAX_PAGES) {
       let url = `${SPARK_API_BASE}/listings?_limit=1000&_orderby=ModificationTimestamp&_expand=Photos`;
-if (lastSync !== '1970-01-01T00:00:00Z') {
-  url += `&_filter=ModificationTimestamp Gt ${lastSync}`;
-}
+      if (lastSync) {
+        url += `&_filter=ModificationTimestamp bt ${lastSync},${syncStartTime}`;
+      }
+      if (skipToken) url += `&_skiptoken=${skipToken}`;
 
       const sparkRes = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
