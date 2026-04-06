@@ -3,12 +3,35 @@ import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdm
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
   try {
-    const { userId } = await req.json();
-    if (!userId) throw new Error('userId required');
-    await supabaseAdmin.from('profiles').update({ last_active: new Date().toISOString() }).eq('id', userId);
+    // Get user from JWT in Authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return jsonResponse({ error: 'No authorization header' }, 401);
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+      return jsonResponse({ error: 'Invalid token' }, 401);
+    }
+
+    // Update last_active_at (correct column name)
+    const { error: updateError } = await supabaseAdmin
+      .from('profiles')
+      .update({ last_active_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    if (updateError) {
+      console.error('Update error:', updateError);
+      return jsonResponse({ error: updateError.message }, 500);
+    }
+
     return jsonResponse({ success: true });
-  } catch (err) {
+  } catch (err: any) {
+    console.error('markUserActive error:', err);
     return jsonResponse({ error: err.message }, 500);
   }
 });
