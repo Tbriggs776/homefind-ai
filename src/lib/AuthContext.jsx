@@ -10,6 +10,8 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
+    let initialLoad = true;
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
@@ -23,6 +25,13 @@ export const AuthProvider = ({ children }) => {
     // Listen for auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, s) => {
+        // Skip the first INITIAL_SESSION event — getSession already handles it
+        if (initialLoad && _event === 'INITIAL_SESSION') {
+          initialLoad = false;
+          return;
+        }
+        initialLoad = false;
+
         setSession(s);
         if (s?.user) {
           await fetchProfile(s.user.id, s.user.email);
