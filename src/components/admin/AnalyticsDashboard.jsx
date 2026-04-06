@@ -272,7 +272,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
   // ── Most favorited properties ───────────────────────────────────────────────
   const topPropertiesByFavorites = useMemo(() => {
     const counts = {};
-    savedProps.filter(s => inRange(s.created_date)).forEach(s => {
+    savedProps.filter(s => inRange(s.created_at)).forEach(s => {
       counts[s.property_id] = (counts[s.property_id] || 0) + 1;
     });
     const propertyMap = new Map(allProperties.map(p => [p.id, p]));
@@ -337,14 +337,19 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
       hour: `${i}:00`,
       views: 0,
     }));
+    const formatter = new Intl.DateTimeFormat('en-US', { 
+      timeZone: 'America/Phoenix', 
+      hour: '2-digit', 
+      hour12: false 
+    });
     viewsInRange.forEach(v => {
-      const formatter = new Intl.DateTimeFormat('en-US', { 
-        timeZone: 'America/Phoenix', 
-        hour: '2-digit', 
-        hour12: false 
-      });
-      const h = parseInt(formatter.format(new Date(v.created_date)));
-      hours[h].views++;
+      if (!v.created_at) return;
+      const date = new Date(v.created_at);
+      if (isNaN(date.getTime())) return;
+      try {
+        const h = parseInt(formatter.format(date));
+        if (h >= 0 && h < 24) hours[h].views++;
+      } catch { /* skip invalid dates */ }
     });
     return hours;
   }, [viewsInRange]);
