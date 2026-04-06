@@ -321,11 +321,21 @@ export default function PropertyDetail() {
             <Card className="shadow-lg border-slate-200 sticky top-24">
               <CardContent className="p-6 space-y-4">
                 <div><p className="text-sm text-slate-600 mb-1">Property Type</p><Badge className="bg-slate-100 text-slate-800 border-0">{property.property_type?.replace(/_/g, ' ')}</Badge></div>
-                {property.lot_size && <div><p className="text-sm text-slate-600 mb-1">Lot Size</p><p className="font-semibold text-slate-900">{property.lot_size} acres</p></div>}
-                {property.days_on_market && <div><p className="text-sm text-slate-600 mb-1">Days on Market</p><p className="font-semibold text-slate-900">{property.days_on_market} days</p></div>}
+                {property.lot_size > 0 && <div><p className="text-sm text-slate-600 mb-1">Lot Size</p><p className="font-semibold text-slate-900">{property.lot_size} acres</p></div>}
+                {property.days_on_market > 0 && <div><p className="text-sm text-slate-600 mb-1">Days on Market</p><p className="font-semibold text-slate-900">{property.days_on_market} days</p></div>}
                 {property.mls_number && <div><p className="text-sm text-slate-600 mb-1">MLS Number</p><p className="font-semibold text-slate-900">{property.mls_number}</p></div>}
                 {property.county && <div><p className="text-sm text-slate-600 mb-1">County</p><p className="font-semibold text-slate-900">{property.county}</p></div>}
-                {property.list_office_name && <div><p className="text-sm text-slate-600 mb-1">Listing Firm</p><p className="font-semibold text-slate-900 text-sm">{property.list_office_name}</p></div>}
+                {(property.list_office_name || property.listing_office_name) && <div><p className="text-sm text-slate-600 mb-1">Listing Firm</p><p className="font-semibold text-slate-900 text-sm">{property.list_office_name || property.listing_office_name}</p></div>}
+
+                {/* ARMLS Rule 23.2.12: Display listing agent email or phone */}
+                {(property.listing_agent_name || property.listing_agent_email || property.listing_agent_phone) && (
+                  <div className="pt-3 border-t border-slate-100">
+                    <p className="text-sm text-slate-600 mb-1">Listing Agent</p>
+                    {property.listing_agent_name && <p className="font-semibold text-slate-900 text-sm">{property.listing_agent_name}</p>}
+                    {property.listing_agent_email && <p className="text-xs text-slate-500">{property.listing_agent_email}</p>}
+                    {property.listing_agent_phone && <p className="text-xs text-slate-500">{property.listing_agent_phone}</p>}
+                  </div>
+                )}
 
                 <div className="pt-4 border-t border-slate-200">
                   {property.listing_source === 'flexmls_idx' ? (
@@ -352,7 +362,7 @@ export default function PropertyDetail() {
                   Contact Agent
                 </Button>
                 <div className="mt-4 pt-3 border-t border-slate-100">
-                  {property.list_office_name && <p className="text-xs text-slate-600 font-medium text-center mb-1">Listing courtesy of {property.list_office_name}</p>}
+                  {(property.list_office_name || property.listing_office_name) && <p className="text-xs text-slate-600 font-medium text-center mb-1">Listing courtesy of {property.list_office_name || property.listing_office_name}</p>}
                   <p className="text-[10px] text-gray-400 text-center">All information should be verified by the recipient and none is guaranteed as accurate by ARMLS.</p>
                   <p className="text-[10px] text-gray-400 text-center mt-1">Information source: ARMLS.</p>
                 </div>

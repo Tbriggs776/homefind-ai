@@ -190,10 +190,16 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
                   className="h-4 w-auto"
                 />
               )}
-              {property.list_office_name && (
-                <p className="text-[10px] text-gray-500 font-medium">Listed by: {property.list_office_name}</p>
+              {(property.list_office_name || property.listing_office_name) && (
+                <p className="text-[10px] text-gray-500 font-medium">Listed by: {property.list_office_name || property.listing_office_name}</p>
               )}
             </div>
+            {/* ARMLS Rule 23.2.12: listing agent email or phone must be displayed */}
+            {(property.listing_agent_email || property.listing_agent_phone) && (
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                {property.listing_agent_email || property.listing_agent_phone}
+              </p>
+            )}
             <p className="text-[10px] text-gray-400 mt-1">All information should be verified by the recipient and none is guaranteed as accurate by ARMLS.</p>
           </Link>
         </CardContent>

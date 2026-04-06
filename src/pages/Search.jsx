@@ -371,7 +371,7 @@ export default function Search() {
               Find Your Dream Home
             </h1>
             <p className="text-white text-lg md:text-xl">
-              Browse 38,000+ active ARMLS listings with intelligent AI-powered search
+              Search active ARMLS listings with intelligent AI-powered search
             </p>
           </div>
         </div>
