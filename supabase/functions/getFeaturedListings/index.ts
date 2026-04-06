@@ -10,27 +10,33 @@ serve(async (req) => {
     const { data, error } = await supabaseAdmin
       .from('properties')
       .select('*')
-      .eq('mls_status', 'Active')
+      .eq('status', 'active')
       .eq('is_featured', true)
-      .order('list_price', { ascending: false })
+      .order('price', { ascending: false })
       .limit(limit);
 
     if (error) throw error;
 
+    // Get total active count for display
+    const { count: totalActive } = await supabaseAdmin
+      .from('properties')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'active');
+
     // If not enough featured, fill with recent listings
-    if (!data || data.length < limit) {
+    let properties = data || [];
+    if (properties.length < limit) {
       const { data: recent } = await supabaseAdmin
         .from('properties')
         .select('*')
-        .eq('mls_status', 'Active')
+        .eq('status', 'active')
         .order('listing_date', { ascending: false })
-        .limit(limit - (data?.length || 0));
-      const combined = [...(data || []), ...(recent || [])];
-      const unique = [...new Map(combined.map(p => [p.id, p])).values()];
-      return jsonResponse({ listings: unique.slice(0, limit) });
+        .limit(limit - properties.length);
+      const combined = [...properties, ...(recent || [])];
+      properties = [...new Map(combined.map(p => [p.id, p])).values()].slice(0, limit);
     }
 
-    return jsonResponse({ listings: data });
+    return jsonResponse({ properties, total_active_listings: totalActive || 0 });
   } catch (err) {
     return jsonResponse({ error: err.message }, 500);
   }
