@@ -35,9 +35,9 @@ export default function Home() {
 
       // If authenticated, do user-specific tasks
       if (user) {
-        try { await invokeFunction('markUserActive', {}); } catch {}
-        try { await invokeFunction('sendWelcomeEmail', {}); } catch {}
-        try { await invokeFunction('syncNewUserToFollowUpBoss', {}); } catch {}
+        try { await invokeFunction('markUserActive', { userId: user.id }); } catch {}
+        try { await invokeFunction('sendWelcomeEmail', { userId: user.id }); } catch {}
+        try { await invokeFunction('syncNewUserToFollowUpBoss', { userId: user.id }); } catch {}
 
         try {
           const { data: saved } = await supabase

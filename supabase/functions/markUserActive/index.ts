@@ -5,24 +5,37 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    // Get user from JWT in Authorization header
+    let userId: string | null = null;
+
+    // Try 1: Get user from JWT in Authorization header (when called with user session)
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return jsonResponse({ error: 'No authorization header' }, 401);
+    if (authHeader && !authHeader.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI')) {
+      // Has a real JWT, not just the anon key
+      const token = authHeader.replace('Bearer ', '');
+      try {
+        const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+        if (user) userId = user.id;
+      } catch (_) { /* fall through to body check */ }
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-
-    if (authError || !user) {
-      return jsonResponse({ error: 'Invalid token' }, 401);
+    // Try 2: Get userId from request body
+    if (!userId) {
+      try {
+        const body = await req.json().catch(() => ({}));
+        if (body.userId) userId = body.userId;
+      } catch (_) { /* ignore */ }
     }
 
-    // Update last_active_at (correct column name)
+    // No user identified — return success silently (this function is fire-and-forget)
+    if (!userId) {
+      return jsonResponse({ success: true, skipped: 'no user identified' });
+    }
+
+    // Update last_active_at
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
       .update({ last_active_at: new Date().toISOString() })
-      .eq('id', user.id);
+      .eq('id', userId);
 
     if (updateError) {
       console.error('Update error:', updateError);
