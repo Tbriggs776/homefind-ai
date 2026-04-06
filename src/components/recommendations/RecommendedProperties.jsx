@@ -15,7 +15,7 @@ export default function RecommendedProperties({ user, savedPropertyIds = [], onF
 
     const fetchRecommendations = async () => {
       try {
-        const result = await invokeFunction('getPersonalizedRecommendations', {});
+        const result = await invokeFunction('getPersonalizedRecommendations', { userId: user.id });
         setRecommendations(result?.recommendations || []);
       } catch (error) {
         console.error('Error fetching recommendations:', error);
