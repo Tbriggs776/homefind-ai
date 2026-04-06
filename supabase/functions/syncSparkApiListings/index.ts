@@ -1,17 +1,37 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
 
-// ─── Configuration ──────────────────────────────────────────────────────────
-const SPARK_REPL_BASE = 'https://replication.sparkapi.com/v1';
-const DB_BATCH_SIZE = 200;
-const SPARK_PAGE_SIZE = 1000;
-const MAX_PAGES = 300;
-const TANNER_AGENT_ID = 'pc295';
+/**
+ * syncSparkApiListings — Spark Replication API sync for HomeFind AI
+ *
+ * Follows the 3-step Spark Replication process exactly:
+ *   Step 1: Initial download (full_sync=true) — no filter, _skiptoken pagination
+ *   Step 2: Incremental updates — ModificationTimestamp bt START,END (both bounds required per docs)
+ *   Step 3: Purge stale data — handled by separate checkInactiveListings function
+ *
+ * Architecture:
+ *   - Each invocation processes up to MAX_PAGES of data (within the ~60s Edge Function timeout)
+ *   - Saves cursor (_skiptoken + timestamps) to sync_cache after each page
+ *   - Cron calls this function every 10 minutes; function picks up where it left off
+ *   - Once caught up (no more pages), it marks sync as complete and goes idle until next window
+ *
+ * Per Spark docs:
+ *   - Replication endpoint: https://replication.sparkapi.com/v1
+ *   - _skiptoken pagination (NOT _skip) for consistent ordering
+ *   - _limit max 1000 for replication keys
+ *   - Always use two timestamps with ModificationTimestamp (bt or gt+lt) to avoid caching errors
+ *   - Use _select to minimize payload, _expand for subresources
+ */
 
-// ─── Spark multi-select field helper ────────────────────────────────────────
-// Spark returns multi-select fields as associative arrays: { "Private": true, "Heated": true }
-// This converts them to readable text for regex matching and display
-function sparkFieldToText(val: any): string {
+const SPARK_REPL = 'https://replication.sparkapi.com/v1';
+const DB_BATCH = 200;
+const SPARK_LIMIT = 1000;
+const MAX_PAGES = 50;  // ~50 pages per invocation = ~50k listings, well within 60s timeout
+const TANNER_ID = 'pc295';
+const CURSOR_KEY = 'spark_sync_cursor';
+
+// ─── Spark multi-select field → text (handles { "Private": true } format) ───
+function sft(val: any): string {
   if (!val) return '';
   if (typeof val === 'string') return val;
   if (Array.isArray(val)) return val.join(' ');
@@ -19,233 +39,169 @@ function sparkFieldToText(val: any): string {
   return String(val);
 }
 
-// ─── Map Spark PropertyType + PropertySubType to normalized types ────────────
-// Per Spark docs: PropertyType "A" = Residential, PropertySubType "SF" = Single Family, "CD" = Condo, etc.
-function mapPropertyType(propertyType: string | undefined, subType: string | undefined): string {
-  if (!subType && !propertyType) return 'single_family';
-  const s = (subType || '').toLowerCase();
-  const p = (propertyType || '').toUpperCase();
-  if (s.includes('sf') || s.includes('single family') || s === 'single family - detached') return 'single_family';
-  if (s.includes('cd') || s.includes('condo') || s.includes('condominium')) return 'condo';
+// ─── PropertyType + SubType → normalized type ───────────────────────────────
+// Spark: PropertyType "A"=Residential, PropertySubType "SF"=Single Family, "CD"=Condo
+function mapType(pt: string | undefined, pst: string | undefined): string {
+  const s = (pst || '').toLowerCase();
+  if (s.includes('sf') || s.includes('single family')) return 'single_family';
+  if (s.includes('cd') || s.includes('condo')) return 'condo';
   if (s.includes('th') || s.includes('townhouse') || s.includes('townhome')) return 'townhouse';
-  if (s.includes('mf') || s.includes('multi') || s.includes('duplex') || s.includes('triplex') || s.includes('fourplex')) return 'multi_family';
-  if (s.includes('land') || s.includes('lot') || s.includes('vacant') || p === 'E') return 'land';
-  if (p === 'A' || p === 'B') return 'single_family';
-  return 'single_family';
+  if (s.includes('mf') || s.includes('multi') || s.includes('duplex') || s.includes('triplex')) return 'multi_family';
+  if (s.includes('land') || s.includes('lot') || s.includes('vacant')) return 'land';
+  return (pt || '').toUpperCase() === 'A' ? 'single_family' : 'single_family';
 }
 
-// ─── Map MlsStatus to frontend-friendly status ─────────────────────────────
-function mapStatus(mlsStatus: string | undefined): string {
-  if (!mlsStatus) return 'active';
-  const s = mlsStatus.toLowerCase();
-  if (s.includes('pending') || s === 'p') return 'pending';
-  if (s.includes('ucb') || s.includes('under contract')) return 'pending';
-  if (s.includes('ccbs') || s.includes('contingent')) return 'pending';
-  if (s.includes('closed') || s.includes('sold') || s === 's') return 'sold';
-  if (s.includes('coming soon') || s === 'cs') return 'coming_soon';
+// ─── MlsStatus → frontend status ───────────────────────────────────────────
+function mapStatus(ms: string | undefined): string {
+  if (!ms) return 'active';
+  const s = ms.toLowerCase();
   if (s.includes('active') || s === 'a') return 'active';
+  if (s.includes('pending') || s.includes('ucb') || s.includes('under contract') || s.includes('ccbs')) return 'pending';
+  if (s.includes('sold') || s.includes('closed')) return 'sold';
+  if (s.includes('coming soon')) return 'coming_soon';
   return 'active';
 }
 
-// ─── Extract structured features array from Spark fields ────────────────────
+// ─── Extract features from Spark fields ─────────────────────────────────────
 function extractFeatures(d: any): string[] {
-  const features: string[] = [];
-  const poolText = sparkFieldToText(d.PoolFeatures).toLowerCase();
-  if (poolText.includes('pool') || poolText.includes('private') || poolText.includes('heated')) features.push('Pool');
-  if ((parseInt(d.GarageSpaces) || 0) > 0) features.push(`${d.GarageSpaces}-Car Garage`);
-  if (d.WaterfrontYN === true || d.WaterfrontYN === 'Yes') features.push('Waterfront');
-  if ((parseInt(d.FireplacesTotal) || 0) > 0) features.push('Fireplace');
-  const basementText = sparkFieldToText(d.Basement).toLowerCase();
-  if (basementText && basementText !== 'none' && basementText !== 'no') features.push('Basement');
-  if (d.PatioAndPorchFeatures && sparkFieldToText(d.PatioAndPorchFeatures)) features.push('Patio');
-  if (d.Cooling) features.push('Central Air');
-  const flooringText = sparkFieldToText(d.Flooring).toLowerCase();
-  if (flooringText.includes('hardwood')) features.push('Hardwood Floors');
-  const parkingStr = [sparkFieldToText(d.ParkingFeatures), typeof d.PublicRemarks === 'string' ? d.PublicRemarks : ''].join(' ').toLowerCase();
-  if (/rv garage|rv gate|rv parking|rv access/.test(parkingStr)) features.push('RV Garage');
-  const spaText = sparkFieldToText(d.SpaFeatures).toLowerCase();
-  if (d.SpaYN === true || d.SpaYN === 'Yes' || spaText.includes('spa') || spaText.includes('hot tub')) features.push('Spa/Hot Tub');
-  const viewText = sparkFieldToText(d.View).toLowerCase();
-  if (d.ViewYN === true || d.ViewYN === 'Yes' || viewText) features.push('View');
-  return features;
+  const f: string[] = [];
+  const pool = sft(d.PoolFeatures).toLowerCase();
+  if (pool.includes('pool') || pool.includes('private') || pool.includes('heated')) f.push('Pool');
+  if ((parseInt(d.GarageSpaces) || 0) > 0) f.push(`${d.GarageSpaces}-Car Garage`);
+  if (d.WaterfrontYN === true || d.WaterfrontYN === 'Yes') f.push('Waterfront');
+  if ((parseInt(d.FireplacesTotal) || 0) > 0) f.push('Fireplace');
+  const bsmt = sft(d.Basement).toLowerCase();
+  if (bsmt && bsmt !== 'none' && bsmt !== 'no') f.push('Basement');
+  if (d.PatioAndPorchFeatures && sft(d.PatioAndPorchFeatures)) f.push('Patio');
+  if (d.Cooling) f.push('Central Air');
+  if (sft(d.Flooring).toLowerCase().includes('hardwood')) f.push('Hardwood Floors');
+  if (/rv garage|rv gate|rv parking|rv access/.test([sft(d.ParkingFeatures), d.PublicRemarks || ''].join(' ').toLowerCase())) f.push('RV Garage');
+  const spa = sft(d.SpaFeatures).toLowerCase();
+  if (d.SpaYN === true || d.SpaYN === 'Yes' || spa.includes('spa') || spa.includes('hot tub')) f.push('Spa/Hot Tub');
+  if (d.ViewYN === true || d.ViewYN === 'Yes' || sft(d.View)) f.push('View');
+  return f;
 }
 
 // ─── Extract next upcoming open house ───────────────────────────────────────
-function extractOpenHouse(d: any): { open_house_date: string | null; open_house_end: string | null; open_house_remarks: string | null } {
-  if (!Array.isArray(d.OpenHouses) || d.OpenHouses.length === 0) {
-    return { open_house_date: null, open_house_end: null, open_house_remarks: null };
-  }
+function extractOH(d: any) {
+  const nil = { open_house_date: null, open_house_end: null, open_house_remarks: null };
+  if (!Array.isArray(d.OpenHouses) || !d.OpenHouses.length) return nil;
   const now = new Date();
   const future = d.OpenHouses
-    .filter((oh: any) => { const s = oh.StartTime || oh.Date; return s && new Date(s) >= now; })
+    .filter((o: any) => { const s = o.StartTime || o.Date; return s && new Date(s) >= now; })
     .sort((a: any, b: any) => new Date(a.StartTime || a.Date).getTime() - new Date(b.StartTime || b.Date).getTime());
-  if (future.length === 0) return { open_house_date: null, open_house_end: null, open_house_remarks: null };
-  const next = future[0];
-  return {
-    open_house_date: next.StartTime || next.Date || null,
-    open_house_end: next.EndTime || null,
-    open_house_remarks: next.Comments || next.Remarks || null,
-  };
+  if (!future.length) return nil;
+  const n = future[0];
+  return { open_house_date: n.StartTime || n.Date || null, open_house_end: n.EndTime || null, open_house_remarks: n.Comments || n.Remarks || null };
 }
 
-// ─── Build full property DB row from a single Spark listing ─────────────────
-function buildPropertyRow(listing: any) {
+// ─── Build DB row from a single Spark listing ───────────────────────────────
+function buildRow(listing: any) {
   const d = listing.StandardFields || listing;
-  const externalId = String(listing.Id || d.ListingKey || '');
-  const listPrice = parseFloat(d.ListPrice || d.CurrentPrice) || 0;
+  const extId = String(listing.Id || d.ListingKey || '');
+  const price = parseFloat(d.ListPrice || d.CurrentPrice) || 0;
+  if (price < 50000) return null;
 
-  // Skip listings under $50k (likely erroneous or non-residential)
-  if (listPrice < 50000) return null;
-
-  // ── Photos: Collect ALL from Photos expansion ──
-  // Per Spark docs, Photos expansion returns array with Uri1024, Uri800, UriLarge, Uri640, Uri300
+  // Photos — collect all from Photos expansion
   const images: string[] = [];
-  let primaryPhotoUrl: string | null = null;
+  let primaryUrl: string | null = null;
   if (Array.isArray(d.Photos)) {
-    for (const photo of d.Photos) {
-      const url = photo.Uri1024 || photo.Uri800 || photo.UriLarge || photo.Uri640 || photo.Uri300;
-      if (url) images.push(url);
-      if (photo.Primary && !primaryPhotoUrl) primaryPhotoUrl = url || null;
+    for (const p of d.Photos) {
+      const u = p.Uri1024 || p.Uri800 || p.UriLarge || p.Uri640 || p.Uri300;
+      if (u) images.push(u);
+      if (p.Primary && !primaryUrl) primaryUrl = u || null;
     }
   }
-  if (images.length === 0) return null; // Skip listings with no photos
-  if (!primaryPhotoUrl) primaryPhotoUrl = images[0];
+  if (!images.length) return null;
+  if (!primaryUrl) primaryUrl = images[0];
 
-  // ── Address ──
-  const addressParts = [d.StreetNumber, d.StreetDirPrefix, d.StreetName, d.StreetSuffix, d.StreetDirSuffix].filter(Boolean).join(' ');
-  const unitPart = d.UnitNumber ? `, Unit ${d.UnitNumber}` : '';
-  const address = (addressParts || d.UnparsedAddress || 'Address Not Available') + unitPart;
+  // Address
+  const addr = [d.StreetNumber, d.StreetDirPrefix, d.StreetName, d.StreetSuffix, d.StreetDirSuffix].filter(Boolean).join(' ');
+  const unit = d.UnitNumber ? `, Unit ${d.UnitNumber}` : '';
+  const address = (addr || d.UnparsedAddress || 'Address Not Available') + unit;
 
-  // ── Full text blob for regex feature detection ──
-  const allText = [
-    d.PublicRemarks, sparkFieldToText(d.CommunityFeatures), sparkFieldToText(d.InteriorFeatures),
-    sparkFieldToText(d.ExteriorFeatures), sparkFieldToText(d.ParkingFeatures), sparkFieldToText(d.OtherStructures),
-    sparkFieldToText(d.ArchitecturalStyle), sparkFieldToText(d.PropertyCondition), sparkFieldToText(d.PoolFeatures),
-    sparkFieldToText(d.GreenEnergyEfficient), sparkFieldToText(d.GreenEnergyGeneration), sparkFieldToText(d.LotFeatures),
-    sparkFieldToText(d.Basement), sparkFieldToText(d.PatioAndPorchFeatures), sparkFieldToText(d.SpaFeatures),
-  ].filter(Boolean).join(' ').toLowerCase();
+  // Full text blob for regex feature detection
+  const all = [d.PublicRemarks, sft(d.CommunityFeatures), sft(d.InteriorFeatures), sft(d.ExteriorFeatures),
+    sft(d.ParkingFeatures), sft(d.OtherStructures), sft(d.ArchitecturalStyle), sft(d.PropertyCondition),
+    sft(d.PoolFeatures), sft(d.GreenEnergyEfficient), sft(d.GreenEnergyGeneration), sft(d.LotFeatures),
+    sft(d.Basement), sft(d.PatioAndPorchFeatures), sft(d.SpaFeatures)].filter(Boolean).join(' ').toLowerCase();
 
-  const lotFeaturesText = sparkFieldToText(d.LotFeatures).toLowerCase();
-  const communityText = sparkFieldToText(d.CommunityFeatures).toLowerCase();
-  const poolText = sparkFieldToText(d.PoolFeatures).toLowerCase();
+  const lotF = sft(d.LotFeatures).toLowerCase();
+  const comF = sft(d.CommunityFeatures).toLowerCase();
+  const poolF = sft(d.PoolFeatures).toLowerCase();
   const stories = parseFloat(d.Stories || d.Levels || '0');
-  const spaText = sparkFieldToText(d.SpaFeatures).toLowerCase();
-  const viewText = sparkFieldToText(d.View).toLowerCase();
-
-  // ── HOA ──
-  const assocVal = String(d.AssociationYN || '').toLowerCase();
-  const hasAssociation = assocVal === 'true' || assocVal === 'yes' || assocVal === 'y' || d.AssociationYN === true || (parseFloat(d.AssociationFee) > 0);
-
-  // ── Featured: Tanner's listings ──
+  const assocYN = String(d.AssociationYN || '').toLowerCase();
+  const hasHOA = assocYN === 'true' || assocYN === 'yes' || d.AssociationYN === true || (parseFloat(d.AssociationFee) > 0);
   const agentId = (d.ListAgentMlsId || '').toLowerCase();
   const coAgentId = (d.CoListAgentMlsId || '').toLowerCase();
-  const isFeatured = agentId === TANNER_AGENT_ID || coAgentId === TANNER_AGENT_ID;
 
-  // ── Virtual tour ──
-  let virtualTourUrl = d.VirtualTourURLUnbranded || '';
-  if (!virtualTourUrl && Array.isArray(d.VirtualTours)) {
-    const tour = d.VirtualTours.find((t: any) => t.Uri || t.Url);
-    if (tour) virtualTourUrl = tour.Uri || tour.Url || '';
+  let vtUrl = d.VirtualTourURLUnbranded || '';
+  if (!vtUrl && Array.isArray(d.VirtualTours)) {
+    const t = d.VirtualTours.find((t: any) => t.Uri || t.Url);
+    if (t) vtUrl = t.Uri || t.Url || '';
   }
 
-  // ── Bathrooms: Full + Half*0.5 (more accurate than BathsTotal) ──
-  const bathrooms = (parseFloat(d.BathsFull) || 0) + (parseFloat(d.BathsHalf) || 0) * 0.5;
-  const bathroomsFinal = bathrooms || parseFloat(d.BathsTotal || d.BathroomsTotalInteger) || 0;
-
-  // ── MLS status ──
+  const baths = (parseFloat(d.BathsFull) || 0) + (parseFloat(d.BathsHalf) || 0) * 0.5;
   const mlsStatus = d.MlsStatus || d.StandardStatus || 'Active';
-  const status = mapStatus(mlsStatus);
 
   return {
-    // Identifiers
-    mls_number: String(d.ListingId || externalId),
-    listing_key: externalId,
-    external_listing_id: externalId,
+    mls_number: String(d.ListingId || extId),
+    listing_key: extId,
+    external_listing_id: extId,
     listing_source: 'flexmls_idx',
-
-    // Status — dual columns for frontend (status) and edge functions (mls_status)
-    status,
+    status: mapStatus(mlsStatus),
     mls_status: mlsStatus,
-
-    // Location
-    address,
-    city: d.City || d.PostalCity || '',
-    state: d.StateOrProvince || 'AZ',
-    zip_code: d.PostalCode || '',
-    county: d.CountyOrParish || '',
-    subdivision: d.SubdivisionName || '',
-    cross_street: d.CrossStreet || '',
-    latitude: parseFloat(d.Latitude) || null,
-    longitude: parseFloat(d.Longitude) || null,
-
-    // Pricing — dual columns for frontend (price) and edge functions (list_price)
-    price: listPrice,
-    list_price: listPrice,
+    address, city: d.City || d.PostalCity || '', state: d.StateOrProvince || 'AZ',
+    zip_code: d.PostalCode || '', county: d.CountyOrParish || '',
+    subdivision: d.SubdivisionName || '', cross_street: d.CrossStreet || '',
+    latitude: parseFloat(d.Latitude) || null, longitude: parseFloat(d.Longitude) || null,
+    price, list_price: price,
     original_list_price: parseFloat(d.OriginalListPrice) || null,
     previous_list_price: parseFloat(d.PreviousListPrice) || null,
     price_change_date: d.PriceChangeTimestamp || null,
-
-    // Property details
     bedrooms: parseInt(d.BedsTotal) || 0,
-    bathrooms: bathroomsFinal,
+    bathrooms: baths || parseFloat(d.BathsTotal || d.BathroomsTotalInteger) || 0,
     square_feet: parseInt(d.BuildingAreaTotal || d.LivingArea || '0') || 0,
     lot_size: parseFloat(d.LotSizeAcres || '0') || null,
     year_built: parseInt(d.YearBuilt || '0') || null,
-    property_type: mapPropertyType(d.PropertyType, d.PropertySubType),
+    property_type: mapType(d.PropertyType, d.PropertySubType),
     garage_spaces: parseInt(d.GarageSpaces || '0') || 0,
     days_on_market: parseInt(d.CumulativeDaysOnMarket || d.DaysOnMarket || '0') || 0,
-
-    // Dates
     listing_date: d.OriginalEntryTimestamp || d.ListingContractDate || d.OnMarketDate || null,
     modification_timestamp: d.ModificationTimestamp || null,
-
-    // Description & media
     description: d.PublicRemarks || '',
-    images,
-    primary_photo_url: primaryPhotoUrl,
-    photo_count: images.length,
-    virtual_tour_url: virtualTourUrl || null,
-    has_virtual_tour: !!virtualTourUrl,
+    images, primary_photo_url: primaryUrl, photo_count: images.length,
+    virtual_tour_url: vtUrl || null, has_virtual_tour: !!vtUrl,
     features: extractFeatures(d),
-
-    // Boolean property flags for search filters
-    private_pool: poolText.includes('private') || poolText.includes('pool') || allText.includes('private pool'),
-    rv_garage: /rv garage|rv parking|rv gate|rv access|rv bay|oversized rv|pull.?through rv|rv height|motorhome garage|toy hauler|rv parking pad|gated rv|rv side yard|rv driveway|rv hookup|rv storage|rv friendly|room for rv|rv accessible/.test(allText),
-    single_story: stories === 1 || allText.includes('single level') || allText.includes('single story') || allText.includes('one level'),
-    horse_property: allText.includes('horse') || allText.includes('equestrian'),
-    corner_lot: lotFeaturesText.includes('corner') || allText.includes('corner lot'),
-    cul_de_sac: /cul.?de.?sac/.test(lotFeaturesText) || /cul.?de.?sac/.test(allText),
-    waterfront: d.WaterfrontYN === true || d.WaterfrontYN === 'Yes' || allText.includes('waterfront') || allText.includes('lakefront'),
-    golf_course_lot: lotFeaturesText.includes('golf') || allText.includes('golf course') || communityText.includes('golf'),
-    community_pool: communityText.includes('pool') || communityText.includes('community pool'),
-    gated_community: communityText.includes('gated') || allText.includes('gated community') || allText.includes('gated entrance'),
-    age_restricted_55plus: d.SeniorCommunityYN === true || d.SeniorCommunityYN === 'Yes' || allText.includes('55+') || allText.includes('55 and older') || allText.includes('senior community') || allText.includes('age restricted') || communityText.includes('55+'),
-    casita_guest_house: /casita|guest house|guest quarters|accessory dwelling|adu|in.?law suite|mother.?in.?law|multigenerational|next.?gen suite|private guest suite|detached guest|secondary living|garage apartment|carriage house|granny flat|backyard cottage/.test(allText),
-    office_den: allText.includes('office') || allText.includes(' den') || allText.includes('bonus room') || allText.includes('study'),
-    basement: !!d.Basement && sparkFieldToText(d.Basement).toLowerCase() !== 'none' && sparkFieldToText(d.Basement).toLowerCase() !== 'no',
-    open_floor_plan: /open floor plan|open concept|great room floor|open great room|open living concept|seamless living|expansive great room|open kitchen living/.test(allText),
-    recently_remodeled: /updated kitchen|updated bathroom|modern updates|upgraded kitchen|upgraded bathroom|new flooring|fresh paint|new countertop|quartz countertop|granite countertop|remodel|renovated|renovation/.test(allText),
-    energy_efficient: /energy efficient|energy saving|dual pane|low.?e windows|tankless water heater|high efficiency|energy star|led lighting|smart thermostat|ev charger/.test(allText) || !!d.GreenEnergyEfficient,
-    solar_owned: /solar owned|owned solar|solar energy system/.test(allText) || (allText.includes('solar') && allText.includes('owned')),
-    solar_leased: /solar lease|leased solar/.test(allText) || (allText.includes('solar') && allText.includes('lease')),
-    spa_hot_tub: d.SpaYN === true || d.SpaYN === 'Yes' || spaText.includes('spa') || spaText.includes('hot tub') || allText.includes('hot tub') || allText.includes(' spa'),
-    has_view: d.ViewYN === true || d.ViewYN === 'Yes' || !!viewText,
-    view_description: sparkFieldToText(d.View) || '',
-
-    // HOA
-    hoa_required: hasAssociation,
-    hoa_fee: parseFloat(d.AssociationFee) || null,
+    // Boolean flags
+    private_pool: poolF.includes('private') || poolF.includes('pool') || all.includes('private pool'),
+    rv_garage: /rv garage|rv parking|rv gate|rv access|rv bay|oversized rv|pull.?through rv|motorhome garage|toy hauler|rv hookup|rv storage|rv friendly|room for rv/.test(all),
+    single_story: stories === 1 || all.includes('single level') || all.includes('single story') || all.includes('one level'),
+    horse_property: all.includes('horse') || all.includes('equestrian'),
+    corner_lot: lotF.includes('corner') || all.includes('corner lot'),
+    cul_de_sac: /cul.?de.?sac/.test(lotF) || /cul.?de.?sac/.test(all),
+    waterfront: d.WaterfrontYN === true || d.WaterfrontYN === 'Yes' || all.includes('waterfront') || all.includes('lakefront'),
+    golf_course_lot: lotF.includes('golf') || all.includes('golf course') || comF.includes('golf'),
+    community_pool: comF.includes('pool') || comF.includes('community pool'),
+    gated_community: comF.includes('gated') || all.includes('gated community') || all.includes('gated entrance'),
+    age_restricted_55plus: d.SeniorCommunityYN === true || d.SeniorCommunityYN === 'Yes' || all.includes('55+') || all.includes('senior community') || all.includes('age restricted') || comF.includes('55+'),
+    casita_guest_house: /casita|guest house|guest quarters|accessory dwelling|adu|in.?law suite|mother.?in.?law|multigenerational|next.?gen suite|detached guest|garage apartment|carriage house|granny flat|backyard cottage/.test(all),
+    office_den: all.includes('office') || all.includes(' den') || all.includes('bonus room') || all.includes('study'),
+    basement: !!d.Basement && sft(d.Basement).toLowerCase() !== 'none' && sft(d.Basement).toLowerCase() !== 'no',
+    open_floor_plan: /open floor plan|open concept|great room floor|open great room|open living concept|seamless living|expansive great room|open kitchen living/.test(all),
+    recently_remodeled: /updated kitchen|updated bathroom|modern updates|upgraded kitchen|upgraded bathroom|new flooring|fresh paint|new countertop|quartz countertop|granite countertop|remodel|renovated|renovation/.test(all),
+    energy_efficient: /energy efficient|energy saving|dual pane|low.?e windows|tankless water heater|high efficiency|energy star|led lighting|smart thermostat|ev charger/.test(all) || !!d.GreenEnergyEfficient,
+    solar_owned: /solar owned|owned solar|solar energy system/.test(all) || (all.includes('solar') && all.includes('owned')),
+    solar_leased: /solar lease|leased solar/.test(all) || (all.includes('solar') && all.includes('lease')),
+    spa_hot_tub: d.SpaYN === true || d.SpaYN === 'Yes' || sft(d.SpaFeatures).toLowerCase().includes('spa') || all.includes('hot tub'),
+    has_view: d.ViewYN === true || d.ViewYN === 'Yes' || !!sft(d.View),
+    view_description: sft(d.View) || '',
+    hoa_required: hasHOA, hoa_fee: parseFloat(d.AssociationFee) || null,
     hoa_fee_frequency: d.AssociationFeeFrequency || '',
-
-    // Tax
     tax_annual_amount: parseFloat(d.TaxAnnualAmount) || null,
-
-    // Schools
-    elementary_school: d.ElementarySchool || '',
-    middle_school: d.MiddleOrJuniorSchool || '',
+    elementary_school: d.ElementarySchool || '', middle_school: d.MiddleOrJuniorSchool || '',
     high_school: d.HighSchool || '',
-
-    // Agent & Office — ARMLS Rule 23.2.12 compliance
+    // Agent & Office — ARMLS Rule 23.2.12
     list_agent_mls_id: d.ListAgentMlsId || '',
     list_office_name: d.ListOfficeName || '',
     listing_office_name: d.ListOfficeName || '',
@@ -254,13 +210,43 @@ function buildPropertyRow(listing: any) {
     listing_agent_email: d.ListAgentEmail || '',
     listing_agent_phone: d.ListAgentDirectPhone || d.ListAgentOfficePhone || d.ListAgentPreferredPhone || '',
     listing_agent_mls_id: d.ListAgentMlsId || '',
-
-    // Featured
-    is_featured: isFeatured,
-
-    // Open house
-    ...extractOpenHouse(d),
+    is_featured: agentId === TANNER_ID || coAgentId === TANNER_ID,
+    ...extractOH(d),
   };
+}
+
+// ─── Field selection for _select parameter ──────────────────────────────────
+const SELECT = [
+  'ListingKey','ListingId','MlsStatus','StandardStatus','PropertyType','PropertySubType',
+  'StreetNumber','StreetDirPrefix','StreetName','StreetSuffix','StreetDirSuffix','UnitNumber','UnparsedAddress',
+  'City','PostalCity','StateOrProvince','PostalCode','CountyOrParish','SubdivisionName','CrossStreet',
+  'Latitude','Longitude','ListPrice','CurrentPrice','OriginalListPrice','PreviousListPrice','PriceChangeTimestamp',
+  'BedsTotal','BathsFull','BathsHalf','BathsTotal','BathroomsTotalInteger',
+  'BuildingAreaTotal','LivingArea','LotSizeAcres','YearBuilt',
+  'PublicRemarks','CumulativeDaysOnMarket','DaysOnMarket',
+  'ModificationTimestamp','ListingContractDate','OnMarketDate','OriginalEntryTimestamp',
+  'PoolFeatures','GarageSpaces','WaterfrontYN','FireplacesTotal',
+  'Basement','PatioAndPorchFeatures','Cooling','Flooring','ParkingFeatures','LotFeatures',
+  'Stories','Levels','AssociationYN','AssociationFee','AssociationFeeFrequency',
+  'CommunityFeatures','SeniorCommunityYN','GreenEnergyEfficient','GreenEnergyGeneration',
+  'OtherStructures','ArchitecturalStyle','InteriorFeatures','ExteriorFeatures',
+  'PropertyCondition','SpaFeatures','SpaYN','View','ViewYN','TaxAnnualAmount',
+  'ElementarySchool','MiddleOrJuniorSchool','HighSchool','VirtualTourURLUnbranded',
+  'ListAgentMlsId','CoListAgentMlsId','ListAgentFullName','ListAgentFirstName','ListAgentLastName',
+  'ListAgentEmail','ListAgentDirectPhone','ListAgentOfficePhone','ListAgentPreferredPhone',
+  'ListOfficeName','ListOfficeKey','ListOfficeMlsId',
+].join(',');
+
+// ─── Load / save cursor ─────────────────────────────────────────────────────
+async function loadCursor() {
+  const { data } = await supabaseAdmin.from('sync_cache').select('cache_value').eq('cache_key', CURSOR_KEY).single();
+  return data?.cache_value || {};
+}
+async function saveCursor(val: any) {
+  await supabaseAdmin.from('sync_cache').upsert(
+    { cache_key: CURSOR_KEY, cache_value: val, updated_at: new Date().toISOString() },
+    { onConflict: 'cache_key' }
+  );
 }
 
 // ─── Main handler ───────────────────────────────────────────────────────────
@@ -268,160 +254,150 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const accessToken = Deno.env.get('SPARK_OAUTH_ACCESS_TOKEN');
-    if (!accessToken) throw new Error('SPARK_OAUTH_ACCESS_TOKEN not set');
+    const token = Deno.env.get('SPARK_OAUTH_ACCESS_TOKEN');
+    if (!token) throw new Error('SPARK_OAUTH_ACCESS_TOKEN not set');
 
     const body = await req.json().catch(() => ({}));
     const fullSync = body.full_sync === true;
+    const cursor = await loadCursor();
 
-    // Load sync cursor
-    const { data: cache } = await supabaseAdmin
-      .from('sync_cache')
-      .select('cache_value')
-      .eq('cache_key', 'spark_last_sync')
-      .single();
+    // ── Determine sync mode ──
+    // full_sync=true OR no previous sync → Step 1: Initial Download (no filter)
+    // Otherwise → Step 2: Incremental Update (ModificationTimestamp bt START,END)
+    const isInitial = fullSync || !cursor.last_completed_sync;
+    const skipToken = (!fullSync && cursor.skiptoken) || '';
+    const now = new Date().toISOString();
 
-    const lastSync = (!fullSync && cache?.cache_value?.timestamp) || '';
-    const syncStartTime = new Date().toISOString();
+    // For incremental: use the window from last completed sync to now
+    // Per Spark docs: ALWAYS use both bounds to avoid server-side caching errors
+    const windowStart = cursor.last_completed_sync || '';
+    const windowEnd = now;
 
-    console.log(`[Sync] Starting ${fullSync ? 'FULL' : 'incremental'} sync. Last: ${lastSync || 'never'}`);
-
-    // Spark field selection — reduces payload per replication docs recommendation
-    const selectFields = [
-      'ListingKey','ListingId','MlsStatus','StandardStatus','PropertyType','PropertySubType',
-      'StreetNumber','StreetDirPrefix','StreetName','StreetSuffix','StreetDirSuffix','UnitNumber','UnparsedAddress',
-      'City','PostalCity','StateOrProvince','PostalCode','CountyOrParish','SubdivisionName','CrossStreet',
-      'Latitude','Longitude',
-      'ListPrice','CurrentPrice','OriginalListPrice','PreviousListPrice','PriceChangeTimestamp',
-      'BedsTotal','BathsFull','BathsHalf','BathsTotal','BathroomsTotalInteger',
-      'BuildingAreaTotal','LivingArea','LotSizeAcres','LotSizeSquareFeet','YearBuilt',
-      'PublicRemarks','CumulativeDaysOnMarket','DaysOnMarket',
-      'ModificationTimestamp','ListingContractDate','OnMarketDate','OriginalEntryTimestamp',
-      'PoolFeatures','GarageSpaces','WaterfrontYN','FireplacesTotal',
-      'Basement','PatioAndPorchFeatures','Cooling','Flooring','ParkingFeatures','LotFeatures',
-      'Stories','Levels','AssociationYN','AssociationFee','AssociationFeeFrequency',
-      'CommunityFeatures','SeniorCommunityYN',
-      'GreenEnergyEfficient','GreenEnergyGeneration',
-      'OtherStructures','ArchitecturalStyle','InteriorFeatures','ExteriorFeatures',
-      'PropertyCondition','SpaFeatures','SpaYN','View','ViewYN',
-      'TaxAnnualAmount',
-      'ElementarySchool','MiddleOrJuniorSchool','HighSchool',
-      'VirtualTourURLUnbranded',
-      'ListAgentMlsId','CoListAgentMlsId','ListAgentFullName','ListAgentFirstName','ListAgentLastName',
-      'ListAgentEmail','ListAgentDirectPhone','ListAgentOfficePhone','ListAgentPreferredPhone',
-      'ListOfficeName','ListOfficeKey','ListOfficeMlsId',
-    ].join(',');
-
-    // IDX filter: Active residential only (ARMLS Rule 23.3.5 prohibits Coming Soon/expired/cancelled)
-    let sparkFilter = `MlsStatus Eq 'Active' And PropertyType Eq 'A'`;
-    if (lastSync) {
-      sparkFilter += ` And ModificationTimestamp Gt ${lastSync}`;
+    let url: string;
+    if (isInitial && !skipToken) {
+      // Step 1: Initial download — per docs: no filter, just _skiptoken pagination
+      // But we add MlsStatus Eq 'Active' for IDX compliance (ARMLS Rule 23.3.5)
+      url = `${SPARK_REPL}/listings?_limit=${SPARK_LIMIT}&_skiptoken=` +
+        `&_filter=${encodeURIComponent("MlsStatus Eq 'Active' And PropertyType Eq 'A'")}` +
+        `&_expand=Photos,VirtualTours,OpenHouses&_select=${SELECT}`;
+    } else if (isInitial && skipToken) {
+      // Continuing initial download from saved cursor
+      url = `${SPARK_REPL}/listings?_limit=${SPARK_LIMIT}&_skiptoken=${skipToken}` +
+        `&_filter=${encodeURIComponent("MlsStatus Eq 'Active' And PropertyType Eq 'A'")}` +
+        `&_expand=Photos,VirtualTours,OpenHouses&_select=${SELECT}`;
+    } else {
+      // Step 2: Incremental — use bt (between) per Spark docs
+      const filter = `MlsStatus Eq 'Active' And PropertyType Eq 'A' And ModificationTimestamp bt ${windowStart},${windowEnd}`;
+      const st = skipToken ? `&_skiptoken=${skipToken}` : '&_skiptoken=';
+      url = `${SPARK_REPL}/listings?_limit=${SPARK_LIMIT}${st}` +
+        `&_filter=${encodeURIComponent(filter)}` +
+        `&_expand=Photos,VirtualTours,OpenHouses&_select=${SELECT}`;
     }
+
+    console.log(`[Sync] Mode: ${isInitial ? 'INITIAL' : 'INCREMENTAL'} | Resuming: ${!!skipToken} | Window: ${windowStart || 'all'} → ${windowEnd}`);
 
     let totalSynced = 0;
     let totalSkipped = 0;
-    let skipToken = '';
+    let currentSkipToken = skipToken;
     let page = 0;
+    let lastSkipToken = '';
 
     while (page < MAX_PAGES) {
-      // Per Spark Replication docs: _skiptoken for pagination, _limit max 1000
-      let url = `${SPARK_REPL_BASE}/listings?_limit=${SPARK_PAGE_SIZE}` +
-        `&_filter=${encodeURIComponent(sparkFilter)}` +
-        `&_orderby=ModificationTimestamp` +
-        `&_expand=Photos,VirtualTours,OpenHouses` +
-        `&_select=${selectFields}`;
+      let pageUrl = page === 0 ? url :
+        url.replace(/(_skiptoken=)[^&]*/, `$1${currentSkipToken}`);
 
-      if (skipToken) url += `&_skiptoken=${skipToken}`;
+      console.log(`[Sync] Page ${page + 1}...`);
 
-      console.log(`[Sync] Page ${page + 1}: fetching...`);
-
-      const sparkRes = await fetch(url, {
+      const res = await fetch(pageUrl, {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           Accept: 'application/json',
-          'User-Agent': 'HomeFind-AI/1.0 (Supabase Edge Function)',
+          'User-Agent': 'HomeFind-AI/2.0 (Supabase Edge Function)',
         },
       });
 
-      if (sparkRes.status === 429) {
-        console.log('[Sync] Rate limited (429) — saving progress and stopping');
+      if (res.status === 429) {
+        console.log('[Sync] Rate limited — saving cursor and stopping');
+        await saveCursor({ ...cursor, skiptoken: currentSkipToken, last_run: now, status: 'rate_limited' });
+        break;
+      }
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Spark ${res.status}: ${err.slice(0, 300)}`);
+      }
+
+      const data = await res.json();
+      const listings = data?.D?.Results || [];
+      if (!listings.length) {
+        console.log('[Sync] No more listings — batch complete');
         break;
       }
 
-      if (!sparkRes.ok) {
-        const errText = await sparkRes.text();
-        throw new Error(`Spark API ${sparkRes.status}: ${errText.slice(0, 500)}`);
-      }
-
-      const sparkData = await sparkRes.json();
-      const listings = sparkData?.D?.Results || [];
-
-      if (listings.length === 0) {
-        console.log('[Sync] No more listings — complete');
-        break;
-      }
-
-      // Map to DB rows
-      const rows = listings.map((l: any) => buildPropertyRow(l)).filter(Boolean);
+      // Map & upsert
+      const rows = listings.map((l: any) => buildRow(l)).filter(Boolean);
       totalSkipped += (listings.length - rows.length);
 
-      // Upsert in batches
-      if (rows.length > 0) {
-        for (let i = 0; i < rows.length; i += DB_BATCH_SIZE) {
-          const batch = rows.slice(i, i + DB_BATCH_SIZE);
-          const { error } = await supabaseAdmin
-            .from('properties')
-            .upsert(batch, { onConflict: 'mls_number' });
-          if (error) {
-            console.error(`[Sync] Upsert error batch ${i}:`, error.message);
-            throw error;
-          }
-          totalSynced += batch.length;
-        }
+      for (let i = 0; i < rows.length; i += DB_BATCH) {
+        const batch = rows.slice(i, i + DB_BATCH);
+        const { error } = await supabaseAdmin.from('properties').upsert(batch, { onConflict: 'mls_number' });
+        if (error) throw new Error(`Upsert error: ${error.message}`);
+        totalSynced += batch.length;
       }
 
-      console.log(`[Sync] Page ${page + 1}: ${listings.length} fetched, ${rows.length} upserted, ${listings.length - rows.length} skipped`);
+      console.log(`[Sync] Page ${page + 1}: ${rows.length} upserted, ${listings.length - rows.length} skipped`);
 
-      // Pagination via _skiptoken per Spark replication docs
-      const nextLink = sparkData?.D?.Pagination?.['@odata.nextLink'] || '';
+      // Extract next _skiptoken from response
+      const nextLink = data?.D?.Pagination?.['@odata.nextLink'] || '';
       if (nextLink) {
         try {
-          const nextUrl = new URL(nextLink.startsWith('http') ? nextLink : `https://replication.sparkapi.com${nextLink}`);
-          skipToken = nextUrl.searchParams.get('_skiptoken') || '';
-        } catch {
-          skipToken = '';
-        }
+          const nUrl = new URL(nextLink.startsWith('http') ? nextLink : `https://replication.sparkapi.com${nextLink}`);
+          lastSkipToken = currentSkipToken;
+          currentSkipToken = nUrl.searchParams.get('_skiptoken') || '';
+        } catch { currentSkipToken = ''; }
       } else {
-        skipToken = '';
+        currentSkipToken = '';
       }
 
-      if (!skipToken) {
-        console.log('[Sync] No more pages — complete');
+      // Save cursor after each page (resume on timeout)
+      await saveCursor({
+        skiptoken: currentSkipToken,
+        mode: isInitial ? 'initial' : 'incremental',
+        window_start: windowStart,
+        window_end: windowEnd,
+        last_run: now,
+        synced_this_session: totalSynced,
+        status: 'in_progress',
+        ...(isInitial ? {} : { last_completed_sync: cursor.last_completed_sync }),
+      });
+
+      if (!currentSkipToken) {
+        console.log('[Sync] No more pages — sync window complete');
         break;
       }
       page++;
     }
 
-    // Save sync cursor
-    await supabaseAdmin.from('sync_cache').upsert({
-      cache_key: 'spark_last_sync',
-      cache_value: {
-        timestamp: syncStartTime,
-        listings_synced: totalSynced,
-        listings_skipped: totalSkipped,
-        pages: page + 1,
-        full_sync: fullSync,
-      },
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'cache_key' });
+    // ── Determine if this sync window is complete ──
+    const syncComplete = !currentSkipToken;
+
+    if (syncComplete) {
+      // Mark the sync as complete — update the last_completed_sync timestamp
+      await saveCursor({
+        skiptoken: '',
+        mode: 'idle',
+        last_completed_sync: now,
+        last_run: now,
+        synced_last_run: totalSynced,
+        status: 'complete',
+      });
+      console.log(`[Sync] COMPLETE: ${totalSynced} synced, ${totalSkipped} skipped`);
+    } else {
+      console.log(`[Sync] PAUSED at page ${page + 1} — will resume on next invocation`);
+    }
 
     // Get total count
     const { count } = await supabaseAdmin
-      .from('properties')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'active');
-
-    console.log(`[Sync] Done: ${totalSynced} synced, ${totalSkipped} skipped, ${count} total active`);
+      .from('properties').select('*', { count: 'exact', head: true }).eq('status', 'active');
 
     return jsonResponse({
       success: true,
@@ -429,7 +405,9 @@ serve(async (req) => {
       skipped: totalSkipped,
       pages: page + 1,
       total_active_listings: count,
-      sync_type: fullSync ? 'full' : 'incremental',
+      sync_complete: syncComplete,
+      sync_type: isInitial ? 'initial' : 'incremental',
+      will_resume: !syncComplete,
     });
 
   } catch (err: any) {
