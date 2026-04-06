@@ -1,34 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { invokeFunction } from '@/api/supabaseClient';
-import { TrendingDown, TrendingUp, Minus } from 'lucide-react';
 
 const RATES_CACHE_KEY = 'mortgage_rates_cache';
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// Validate that all rates are real numbers — prevents cache poisoning
+function isValidRatesArray(arr) {
+  return Array.isArray(arr)
+    && arr.length === 5
+    && arr.every(r => r && typeof r.rate === 'number' && r.rate > 0 && r.rate < 30);
+}
+
+const FALLBACK_RATES = [
+  { label: '30-Yr Fixed', rate: 6.87 },
+  { label: '15-Yr Fixed', rate: 6.13 },
+  { label: '5/1 ARM', rate: 6.37 },
+  { label: 'FHA 30-Yr', rate: 6.62 },
+  { label: 'VA 30-Yr', rate: 6.57 },
+];
 
 export default function MortgageRateTicker() {
-  const [rates, setRates] = useState([
-    { label: '30-Yr Fixed', rate: null },
-    { label: '15-Yr Fixed', rate: null },
-    { label: '5/1 ARM', rate: null },
-    { label: 'FHA 30-Yr', rate: null },
-    { label: 'VA 30-Yr', rate: null },
-  ]);
+  const [rates, setRates] = useState(FALLBACK_RATES);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
   useEffect(() => {
-    // Check localStorage cache first (cache for 6 hours)
+    // Check cache — but ONLY use it if the data is valid
     const cached = localStorage.getItem(RATES_CACHE_KEY);
     if (cached) {
       try {
         const { data, timestamp } = JSON.parse(cached);
-        const sixHours = 6 * 60 * 60 * 1000;
-        if (Date.now() - timestamp < sixHours) {
+        if (isValidRatesArray(data) && Date.now() - timestamp < CACHE_TTL_MS) {
           setRates(data);
           setLastUpdated(new Date(timestamp));
           setLoading(false);
           return;
+        } else {
+          // Stale or corrupt — clear it
+          localStorage.removeItem(RATES_CACHE_KEY);
         }
-      } catch (_) {}
+      } catch (_) {
+        localStorage.removeItem(RATES_CACHE_KEY);
+      }
     }
 
     fetchRates();
@@ -36,27 +49,7 @@ export default function MortgageRateTicker() {
 
   const fetchRates = async () => {
     try {
-      const result = await invokeFunction('invokeLLM', {
-        prompt: `Fetch the current average US mortgage interest rates as of today (${new Date().toLocaleDateString()}).
-        Return ONLY a JSON object with these exact keys and their current rates as numbers (e.g. 6.85):
-        - thirty_year_fixed
-        - fifteen_year_fixed
-        - five_one_arm
-        - fha_thirty_year
-        - va_thirty_year
-        Use the most recent Freddie Mac or Bankrate data. Return only the JSON, no other text.`,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: 'object',
-          properties: {
-            thirty_year_fixed: { type: 'number' },
-            fifteen_year_fixed: { type: 'number' },
-            five_one_arm: { type: 'number' },
-            fha_thirty_year: { type: 'number' },
-            va_thirty_year: { type: 'number' },
-          }
-        }
-      });
+      const result = await invokeFunction('getMortgageRates', {});
 
       const newRates = [
         { label: '30-Yr Fixed', rate: result.thirty_year_fixed },
@@ -66,18 +59,22 @@ export default function MortgageRateTicker() {
         { label: 'VA 30-Yr', rate: result.va_thirty_year },
       ];
 
-      setRates(newRates);
-      setLastUpdated(new Date());
-      localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ data: newRates, timestamp: Date.now() }));
-    } catch (_) {
-      // Use fallback rates
-      setRates([
-        { label: '30-Yr Fixed', rate: 6.87 },
-        { label: '15-Yr Fixed', rate: 6.13 },
-        { label: '5/1 ARM', rate: 6.44 },
-        { label: 'FHA 30-Yr', rate: 6.55 },
-        { label: 'VA 30-Yr', rate: 6.28 },
-      ]);
+      // Only cache if the data is valid — prevents poisoning the cache
+      if (isValidRatesArray(newRates)) {
+        setRates(newRates);
+        setLastUpdated(new Date());
+        localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({
+          data: newRates,
+          timestamp: Date.now(),
+        }));
+      } else {
+        // Edge function returned incomplete data — show fallback, don't cache
+        console.warn('getMortgageRates returned incomplete data, using fallback');
+        setRates(FALLBACK_RATES);
+      }
+    } catch (err) {
+      console.error('Mortgage ticker fetch failed:', err);
+      setRates(FALLBACK_RATES);
     } finally {
       setLoading(false);
     }
