@@ -33,8 +33,7 @@ export default function NavigationTracker() {
         // Navigation tracking is now handled via Supabase analytics or removed
         // No equivalent direct replacement needed
         if (isAuthenticated && pageName) {
-            // Supabase analytics integration would go here if needed
-            // For now, this is a no-op as base44.appLogs is removed
+            // Page navigation tracking via Supabase analytics
         }
     }, [location, isAuthenticated, Pages, mainPageKey]);
 

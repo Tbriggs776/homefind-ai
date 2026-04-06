@@ -185,7 +185,7 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
             <div className="mt-3 flex items-center gap-2">
               {property.listing_source === 'flexmls_idx' && (
                 <img 
-                  src="https://media.base44.com/images/public/697b9f63392cd09996fa3652/8de181950_IMG_0012.jpeg" 
+                  src="/armls-logo.png" 
                   alt="ARMLS" 
                   className="h-4 w-auto"
                 />

@@ -330,7 +330,7 @@ export default function PropertyDetail() {
                 <div className="pt-4 border-t border-slate-200">
                   {property.listing_source === 'flexmls_idx' ? (
                     <div className="flex items-center justify-center bg-slate-50 rounded-lg p-3">
-                      <img src="https://media.base44.com/images/public/697b9f63392cd09996fa3652/d153d5775_IMG_0012.jpeg" alt="ARMLS" className="h-8 object-contain" />
+                      <img src="/armls-logo.png" alt="ARMLS" className="h-8 object-contain" />
                     </div>
                   ) : (
                     <><p className="text-xs text-slate-500">Listing Source</p><Badge variant="outline" className="mt-1">{property.listing_source?.replace(/_/g, ' ')}</Badge></>

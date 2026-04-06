@@ -1,6 +1,4 @@
-// App params - simplified after Base44 removal.
-// Supabase config is now handled via environment variables in supabaseClient.js.
-// This file is kept for any remaining imports but no longer manages auth tokens.
+// App params — Supabase config is in supabaseClient.js.
 
 const getAppParamValue = (paramName, { defaultValue = undefined, removeFromUrl = false } = {}) => {
   if (typeof window === 'undefined') return defaultValue;

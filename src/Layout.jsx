@@ -58,7 +58,7 @@ export default function Layout({ children, currentPageName }) {
             {/* Logo */}
             <Link to={createPageUrl('Home')} className="flex items-center group">
               <img
-                src="https://media.base44.com/images/public/697b9f63392cd09996fa3652/59702c16b_Balboa-Realty-CRE-Logo-1.png"
+                src="/balboa-realty-logo.png"
                 alt="Crandell Real Estate Team - Balboa Realty"
                 className="h-10 md:h-12 w-auto object-contain group-hover:opacity-90 transition-opacity"
               />
