@@ -107,7 +107,7 @@ What would you like to know?`
         image_urls: imagesCopy.length > 0 ? imagesCopy : undefined
       });
 
-      const assistantMessage = { role: 'assistant', content: data?.response || data };
+      const assistantMessage = { role: 'assistant', content: data?.reply || data?.response || 'No response received.' };
       setMessages(prev => [...prev, assistantMessage]);
 
       // Apply filters if AI returned search criteria
