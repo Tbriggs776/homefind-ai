@@ -33,9 +33,12 @@ export default function Layout({ children, currentPageName }) {
     navigate('/');
   };
 
+  // Search is available to everyone (anonymous browsing is critical for an
+  // IDX site — Zillow/Redfin let buyers search before any sign-in). Saved
+  // Homes stays gated because saving genuinely requires an account.
   const mainNavLinks = [
     { name: 'Home', path: 'Home', icon: Home, show: true },
-    { name: 'Search Homes', path: 'Search', icon: Search, show: !!user },
+    { name: 'Search Homes', path: 'Search', icon: Search, show: true },
     { name: 'Saved Homes', path: 'SavedProperties', icon: Heart, show: !!user },
   ];
 
@@ -47,13 +50,13 @@ export default function Layout({ children, currentPageName }) {
   ];
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header
-        className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm relative"
+        className="bg-white border-b border-border sticky top-0 z-50 shadow-sm"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="crandell-container">
           <div className="flex justify-between items-center h-14 md:h-16">
             {/* Logo */}
             <Link to={createPageUrl('Home')} className="flex items-center group">
@@ -75,8 +78,8 @@ export default function Layout({ children, currentPageName }) {
                       variant="ghost"
                       className={`flex items-center gap-2 select-none ${
                         isActive
-                          ? 'bg-[#52ADEA]/10 text-[#52ADEA]'
-                          : 'text-black hover:text-[#52ADEA] hover:bg-[#52ADEA]/10'
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-foreground hover:text-primary hover:bg-primary/10'
                       }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -92,7 +95,7 @@ export default function Layout({ children, currentPageName }) {
               {!user && (
                 <Link to="/Login">
                   <Button
-                    className="bg-[#52ADEA] hover:bg-[#3a9dd8] text-white select-none font-semibold"
+                    className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground select-none font-semibold"
                   >
                     Sign In
                   </Button>
@@ -100,13 +103,13 @@ export default function Layout({ children, currentPageName }) {
               )}
               {user && (
                 <button
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="p-2 rounded-lg hover:bg-muted transition-colors"
                   onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 >
                   {mobileMenuOpen ? (
-                    <X className="h-6 w-6 text-slate-600" />
+                    <X className="h-6 w-6 text-muted-foreground" />
                   ) : (
-                    <Menu className="h-6 w-6 text-slate-600" />
+                    <Menu className="h-6 w-6 text-muted-foreground" />
                   )}
                 </button>
               )}
@@ -116,7 +119,7 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Hamburger Menu (all screen sizes, for logged-in users) */}
         {mobileMenuOpen && user && (
-          <div className="border-t border-slate-200 bg-white absolute right-0 top-full w-64 shadow-xl rounded-bl-xl z-50">
+          <div className="border-t border-border bg-white absolute right-0 top-full w-64 shadow-xl rounded-bl-xl z-50">
             <div className="px-4 py-4 space-y-1">
               {/* Mobile-only: show main nav links */}
               <div className="md:hidden space-y-1 mb-2">
@@ -128,19 +131,19 @@ export default function Layout({ children, currentPageName }) {
                       to={createPageUrl(link.path)}
                       onClick={() => setMobileMenuOpen(false)}
                     >
-                      <Button variant="ghost" className="w-full justify-start gap-2 text-black">
+                      <Button variant="ghost" className="w-full justify-start gap-2 text-foreground">
                         <Icon className="h-4 w-4" />
                         {link.name}
                       </Button>
                     </Link>
                   );
                 })}
-                <div className="border-t border-gray-200 my-2" />
+                <div className="border-t border-border my-2" />
               </div>
 
               {/* Profile link */}
               <Link to={createPageUrl('Profile')} onClick={() => setMobileMenuOpen(false)}>
-                <Button variant="ghost" className="w-full justify-start gap-2 text-black">
+                <Button variant="ghost" className="w-full justify-start gap-2 text-foreground">
                   <User className="h-4 w-4" />
                   {user.full_name || 'Profile'}
                 </Button>
@@ -149,8 +152,8 @@ export default function Layout({ children, currentPageName }) {
               {/* Admin links */}
               {isAdmin && (
                 <>
-                  <div className="border-t border-gray-200 my-2" />
-                  <p className="text-xs text-gray-400 uppercase tracking-wider px-3 py-1">Admin</p>
+                  <div className="border-t border-border my-2" />
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider px-3 py-1">Admin</p>
                   {adminLinks.map((link) => {
                     const Icon = link.icon;
                     return (
@@ -159,7 +162,7 @@ export default function Layout({ children, currentPageName }) {
                         to={createPageUrl(link.path)}
                         onClick={() => setMobileMenuOpen(false)}
                       >
-                        <Button variant="ghost" className="w-full justify-start gap-2 text-black">
+                        <Button variant="ghost" className="w-full justify-start gap-2 text-foreground">
                           <Icon className="h-4 w-4" />
                           {link.name}
                         </Button>
@@ -169,11 +172,11 @@ export default function Layout({ children, currentPageName }) {
                 </>
               )}
 
-              <div className="border-t border-gray-200 my-2" />
+              <div className="border-t border-border my-2" />
               <Button
                 variant="ghost"
                 onClick={handleLogout}
-                className="w-full justify-start gap-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
               >
                 <LogOut className="h-4 w-4" />
                 Sign Out
@@ -208,10 +211,10 @@ export default function Layout({ children, currentPageName }) {
         className="bg-black text-gray-300 mt-20 mb-16 md:mb-0"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="crandell-container py-12">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
-              <h3 className="text-[#52ADEA] font-bold text-lg mb-2">Crandell Real Estate Team</h3>
+              <h3 className="text-primary font-bold text-lg mb-2">Crandell Real Estate Team</h3>
               <p className="text-sm text-gray-400 font-medium">Balboa Realty</p>
               <p className="text-sm text-gray-400 mt-2">
                 Your premier destination for finding the perfect home in Arizona.
