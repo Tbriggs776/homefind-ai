@@ -83,7 +83,7 @@ export default function MortgageRateTicker() {
   const tickerItems = [...rates, ...rates]; // duplicate for seamless loop
 
   return (
-    <div className="bg-gray-900 text-white overflow-hidden border-t border-gray-700" style={{ height: '36px' }}>
+    <div className="w-full max-w-[100vw] bg-gray-900 text-white overflow-hidden border-t border-gray-700" style={{ height: '36px' }}>
       <div className="flex items-center h-full">
         {/* Label */}
         <div className="flex-shrink-0 bg-crandell-primary px-3 h-full flex items-center z-10">
