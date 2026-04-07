@@ -26,7 +26,7 @@ import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdm
 const SPARK_REPL = 'https://replication.sparkapi.com/v1';
 const DB_BATCH = 200;
 const SPARK_LIMIT = 1000;
-const MAX_PAGES = 50;  // ~50 pages per invocation = ~50k listings, well within 60s timeout
+const MAX_PAGES = 3;  // 3 pages × 1000 listings = ~3k listings per invocation, fits in compute budget. Cron resumes across runs via cursor.
 const TANNER_ID = 'pc295';
 const CURSOR_KEY = 'spark_sync_cursor';
 
