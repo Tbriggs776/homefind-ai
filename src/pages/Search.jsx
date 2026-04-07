@@ -25,6 +25,14 @@ function getDistanceMiles(lat1, lon1, lat2, lon2) {
 
 const SESSION_KEY = 'search_state';
 
+// How many properties to fetch for the map view. The map query is "lite" —
+// it only fetches the columns needed to render a pin and a popup, so the
+// payload per row is roughly 1/5 the size of a full property row. 500 rows
+// of lite data is roughly equivalent to 100 rows of full data in bandwidth.
+// With clustering enabled in PropertyMap, 500 pins is plenty for the entire
+// East Valley plus surrounding metro.
+const MAP_QUERY_LIMIT = 500;
+
 function loadSessionState() {
   try {
     const saved = sessionStorage.getItem(SESSION_KEY);
@@ -43,13 +51,6 @@ function saveSessionState(state) {
 // Read URL params on initial mount. URL params take precedence over saved
 // session state — this is what makes the homepage hero search bar and city
 // chips actually filter results when the user clicks them.
-//
-//   /Search?q=Queen+Creek      → filters.city = "Queen Creek"
-//   /Search?city=Queen+Creek   → filters.city = "Queen Creek"
-//
-// We default ?q= to filling filters.city because that's the most common case
-// for a buyer typing a place name. If they typed an address it won't filter
-// precisely but will still narrow to the right city.
 function getInitialFilters(savedFilters) {
   if (typeof window === 'undefined') return savedFilters || {};
 
@@ -57,7 +58,6 @@ function getInitialFilters(savedFilters) {
   const cityParam = urlParams.get('city');
   const qParam = urlParams.get('q');
 
-  // Only override saved state if URL has explicit params
   if (cityParam || qParam) {
     return {
       ...(savedFilters || {}),
@@ -66,6 +66,55 @@ function getInitialFilters(savedFilters) {
   }
 
   return savedFilters || {};
+}
+
+// Apply the current filter set to a Supabase query builder. Used by both
+// the grid query and the map query so they stay in sync — when the user
+// changes a filter, both queries re-run with the same WHERE clause.
+function applyFiltersToQuery(query, filters) {
+  if (filters.status && filters.status !== 'all') {
+    query = query.eq('status', filters.status);
+  } else {
+    query = query.in('status', ['active', 'coming_soon']);
+  }
+
+  if (filters.bedrooms) query = query.gte('bedrooms', parseInt(filters.bedrooms));
+  if (filters.bathrooms) query = query.gte('bathrooms', parseFloat(filters.bathrooms));
+  if (filters.min_price) query = query.gte('price', parseFloat(filters.min_price));
+  if (filters.max_price) query = query.lte('price', parseFloat(filters.max_price));
+  if (filters.min_sqft) query = query.gte('square_feet', parseInt(filters.min_sqft));
+  if (filters.property_types?.length > 0) query = query.in('property_type', filters.property_types);
+  if (filters.min_garage_spaces) query = query.gte('garage_spaces', parseInt(filters.min_garage_spaces));
+  if (filters.min_lot_size) query = query.gte('lot_size', parseFloat(filters.min_lot_size));
+  if (filters.min_year_built) query = query.gte('year_built', parseInt(filters.min_year_built));
+  if (filters.max_year_built) query = query.lte('year_built', parseInt(filters.max_year_built));
+
+  const booleanFilters = [
+    'private_pool', 'rv_garage', 'single_story', 'horse_property', 'corner_lot',
+    'cul_de_sac', 'waterfront', 'golf_course_lot', 'community_pool', 'gated_community',
+    'age_restricted_55plus', 'casita_guest_house', 'office_den', 'basement',
+    'open_floor_plan', 'recently_remodeled', 'energy_efficient', 'solar_owned', 'solar_leased',
+    'spa_hot_tub', 'has_view'
+  ];
+  booleanFilters.forEach(key => {
+    if (filters[key]) query = query.eq(key, true);
+  });
+
+  if (filters.has_virtual_tour) query = query.neq('virtual_tour_url', '');
+  if (filters.hoa_filter === 'yes') query = query.eq('hoa_required', true);
+  if (filters.hoa_filter === 'no') query = query.neq('hoa_required', true);
+
+  if (filters.city) query = query.ilike('city', `%${filters.city}%`);
+  if (filters.zip_code) query = query.ilike('zip_code', `%${filters.zip_code}%`);
+  if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision}%`);
+
+  if (filters.school_name) {
+    query = query.or(
+      `elementary_school.ilike.%${filters.school_name}%,middle_school.ilike.%${filters.school_name}%,high_school.ilike.%${filters.school_name}%`
+    );
+  }
+
+  return query;
 }
 
 export default function Search() {
@@ -104,67 +153,16 @@ export default function Search() {
     filters.min_price || filters.max_price || filters.min_sqft || (filters.property_types?.length > 0) ||
     filters.min_garage_spaces || filters.private_pool || filters.single_story;
 
-  // Fetch properties with Supabase filtering and pagination
+  // ============================================================================
+  // GRID QUERY — full property data, paginated, 50 per page
+  // ============================================================================
   const { data: properties = [], isLoading } = useQuery({
     queryKey: ['properties', filters, currentPage, userLocation?.lat, sortBy],
     queryFn: async () => {
       let query = supabase.from('properties').select('*');
+      query = applyFiltersToQuery(query, filters);
 
-      // Status filter
-      if (filters.status && filters.status !== 'all') {
-        query = query.eq('status', filters.status);
-      } else {
-        query = query.in('status', ['active', 'coming_soon']);
-      }
-
-      // Number range filters
-      if (filters.bedrooms) query = query.gte('bedrooms', parseInt(filters.bedrooms));
-      if (filters.bathrooms) query = query.gte('bathrooms', parseFloat(filters.bathrooms));
-      if (filters.min_price) query = query.gte('price', parseFloat(filters.min_price));
-      if (filters.max_price) query = query.lte('price', parseFloat(filters.max_price));
-      if (filters.min_sqft) query = query.gte('square_feet', parseInt(filters.min_sqft));
-      if (filters.property_types?.length > 0) query = query.in('property_type', filters.property_types);
-      if (filters.min_garage_spaces) query = query.gte('garage_spaces', parseInt(filters.min_garage_spaces));
-      if (filters.min_lot_size) query = query.gte('lot_size', parseFloat(filters.min_lot_size));
-      if (filters.min_year_built) query = query.gte('year_built', parseInt(filters.min_year_built));
-      if (filters.max_year_built) query = query.lte('year_built', parseInt(filters.max_year_built));
-
-      // Boolean property filters
-      const booleanFilters = [
-        'private_pool', 'rv_garage', 'single_story', 'horse_property', 'corner_lot',
-        'cul_de_sac', 'waterfront', 'golf_course_lot', 'community_pool', 'gated_community',
-        'age_restricted_55plus', 'casita_guest_house', 'office_den', 'basement',
-        'open_floor_plan', 'recently_remodeled', 'energy_efficient', 'solar_owned', 'solar_leased',
-        'spa_hot_tub', 'has_view'
-      ];
-      booleanFilters.forEach(key => {
-        if (filters[key]) query = query.eq(key, true);
-      });
-
-      // Virtual tour filter
-      if (filters.has_virtual_tour) query = query.neq('virtual_tour_url', '');
-
-      // HOA filter
-      if (filters.hoa_filter === 'yes') query = query.eq('hoa_required', true);
-      if (filters.hoa_filter === 'no') query = query.neq('hoa_required', true);
-
-      // Text-based filters (city, zip, subdivision, school) use ilike for partial matching
-      const hasTextFilter = filters.city || filters.zip_code || filters.subdivision || filters.school_name;
-
-      if (hasTextFilter) {
-        if (filters.city) query = query.ilike('city', `%${filters.city}%`);
-        if (filters.zip_code) query = query.ilike('zip_code', `%${filters.zip_code}%`);
-        if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision}%`);
-
-        // School filter needs OR across three columns
-        if (filters.school_name) {
-          query = query.or(
-            `elementary_school.ilike.%${filters.school_name}%,middle_school.ilike.%${filters.school_name}%,high_school.ilike.%${filters.school_name}%`
-          );
-        }
-      }
-
-      // Ordering — sortBy controls the primary sort
+      // Sort ordering
       if (sortBy === 'price_low') {
         query = query.order('price', { ascending: true });
       } else if (sortBy === 'price_high') {
@@ -172,13 +170,11 @@ export default function Search() {
       } else if (sortBy === 'newest') {
         query = query.order('created_at', { ascending: false });
       } else {
-        // 'distance' or default — order by created_at as the DB-level sort,
-        // then re-sort by distance in the application layer below
         query = query.order('created_at', { ascending: false });
       }
 
-      // If user has location and sortBy is 'distance' and no specific filters,
-      // fetch more and sort by distance in JS
+      // Geolocation special case: if user has location, sort=distance, no
+      // active filters, and on page 1 — fetch up to 500 and sort by distance
       if (userLocation && sortBy === 'distance' && !hasActiveFilters && currentPage === 1) {
         query = query.limit(500);
         const { data, error } = await query;
@@ -194,25 +190,49 @@ export default function Search() {
         return sorted.slice(0, PAGE_SIZE);
       }
 
-      // Paginated query
       const from = (currentPage - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
       query = query.range(from, to);
 
-      const { data, error, count } = await query;
+      const { data, error } = await query;
       if (error) throw error;
 
-      // Approximate count
       if (currentPage === 1) {
         if ((data || []).length < PAGE_SIZE) {
           setTotalCount((data || []).length);
         } else {
-          setTotalCount(PAGE_SIZE + 1); // indicates more pages
+          setTotalCount(PAGE_SIZE + 1);
         }
       }
 
       return data || [];
     },
+  });
+
+  // ============================================================================
+  // MAP QUERY — lite property data (just enough for pins + popups), up to 500
+  // ----------------------------------------------------------------------------
+  // Runs in parallel with the grid query on every filter change. Uses a
+  // separate cache key so the two don't conflict. Always runs (not gated on
+  // viewMode) so the data is cached by the time the user clicks Map view.
+  // The lite payload (~13 columns vs select('*')) keeps this fast even at 500
+  // rows.
+  // ============================================================================
+  const { data: mapProperties = [], isLoading: mapLoading } = useQuery({
+    queryKey: ['mapProperties', filters],
+    queryFn: async () => {
+      let query = supabase
+        .from('properties')
+        .select('id, latitude, longitude, price, address, city, state, zip_code, bedrooms, bathrooms, square_feet, images, cross_street');
+
+      query = applyFiltersToQuery(query, filters);
+      query = query.limit(MAP_QUERY_LIMIT);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 30000,  // cache map data for 30s — same filters within 30s reuses result
   });
 
   // Fetch saved properties
@@ -250,7 +270,6 @@ export default function Search() {
           property_id: property.id
         });
 
-        // Track engagement
         await supabase.from('property_views').insert({
           property_id: property.id,
           user_id: user.id,
@@ -305,6 +324,7 @@ export default function Search() {
   const handlePullRefresh = async () => {
     setIsRefreshing(true);
     await queryClient.invalidateQueries({ queryKey: ['properties'] });
+    await queryClient.invalidateQueries({ queryKey: ['mapProperties'] });
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
@@ -356,7 +376,6 @@ export default function Search() {
     setFilters(newFilters);
     setCurrentPage(1);
 
-    // Save search preferences
     if (user) {
       (async () => {
         const prefsData = {
@@ -385,7 +404,6 @@ export default function Search() {
     }
   };
 
-  // Sort options for the dropdown
   const sortOptions = [
     { value: 'distance', label: userLocation ? 'Closest to you' : 'Newest first' },
     { value: 'price_low', label: 'Price: Low to High' },
@@ -401,7 +419,6 @@ export default function Search() {
         </div>
       )}
 
-      {/* Main Content — kitchen hero deleted, page now starts directly with results */}
       <div
         className="crandell-container py-8"
         onTouchStart={handleTouchStart}
@@ -420,11 +437,13 @@ export default function Search() {
               onDismiss={dismissLocation}
             />
 
-            {/* Results header — count, sort dropdown, view toggle */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-normal text-foreground">
-                  {totalCount > PAGE_SIZE ? `${PAGE_SIZE}+` : totalCount} {totalCount === 1 ? 'Home' : 'Homes'} Available
+                  {viewMode === 'map'
+                    ? `${mapProperties.length.toLocaleString()} ${mapProperties.length === 1 ? 'Home' : 'Homes'} on Map`
+                    : `${totalCount > PAGE_SIZE ? `${PAGE_SIZE}+` : totalCount} ${totalCount === 1 ? 'Home' : 'Homes'} Available`
+                  }
                 </h2>
                 {filters.city && (
                   <p className="text-muted-foreground mt-1 text-sm">
@@ -434,7 +453,6 @@ export default function Search() {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Sort dropdown — replaces the static "Sorted by distance from you" text */}
                 <div className="flex items-center gap-2">
                   <label htmlFor="sort-select" className="text-sm text-muted-foreground whitespace-nowrap">
                     Sort:
@@ -451,7 +469,6 @@ export default function Search() {
                   </select>
                 </div>
 
-                {/* View toggle — Grid / Map */}
                 <div className="flex gap-2">
                   <Button
                     variant={viewMode === 'grid' ? 'default' : 'outline'}
@@ -475,7 +492,21 @@ export default function Search() {
               </div>
             </div>
 
-            {isLoading ? (
+            {viewMode === 'map' ? (
+              // Map view — uses the dedicated mapProperties query (up to 500 pins)
+              mapLoading ? (
+                <div className="flex justify-center items-center py-20">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <PropertyMap
+                  properties={properties}
+                  mapProperties={mapProperties}
+                  onFavorite={handleFavorite}
+                  savedPropertyIds={savedPropertyIds}
+                />
+              )
+            ) : isLoading ? (
               <div className="flex justify-center items-center py-20">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
@@ -484,12 +515,6 @@ export default function Search() {
                 <p className="text-foreground text-lg">No properties match your search criteria.</p>
                 <p className="text-muted-foreground mt-2">Try adjusting your filters.</p>
               </div>
-            ) : viewMode === 'map' ? (
-              <PropertyMap
-                properties={properties}
-                onFavorite={handleFavorite}
-                savedPropertyIds={savedPropertyIds}
-              />
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -533,16 +558,11 @@ export default function Search() {
                 )}
               </>
             )}
-
-            {/* RecommendedProperties rail removed — it was showing random unrelated
-                listings on a search results page, which confused the filter state.
-                Recommendations belong on detail pages as "Similar Homes" scoped to
-                the current property, not on a search results page. */}
           </div>
         </div>
       </div>
 
-      {/* Compare Bar — preserved as-is, buyers ask for this feature */}
+      {/* Compare Bar */}
       {comparePropertyIds.length > 0 && (
         <div
           className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 md:bottom-6"
@@ -580,7 +600,6 @@ export default function Search() {
         </div>
       )}
 
-      {/* AI Assistant — preserved with all props including onApplyFilters */}
       {user && (
         <AIAssistant
           user={user}
