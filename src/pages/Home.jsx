@@ -100,7 +100,6 @@ export default function Home() {
     e.preventDefault();
     const trimmed = heroSearchValue.trim();
     if (trimmed) {
-      // Pass the search query as a URL param so the search page picks it up
       navigate(`${createPageUrl('Search')}?q=${encodeURIComponent(trimmed)}`);
     } else {
       navigate(createPageUrl('Search'));
@@ -116,13 +115,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
 
-      {/* ====================================================================
-          PERSONALIZED WELCOME BANNER (logged-in users only)
-          --------------------------------------------------------------------
-          Small, restrained, doesn't compete with the hero. Lives ABOVE the
-          hero so the primary search action is always the same first thing
-          every visitor sees regardless of auth state.
-          ==================================================================== */}
+      {/* Personalized welcome banner — logged-in only */}
       {user && firstName && (
         <div className="bg-secondary text-secondary-foreground">
           <div className="crandell-container py-2 flex items-center justify-between text-sm">
@@ -139,18 +132,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* ====================================================================
-          HERO — search bar IS the call to action
-          --------------------------------------------------------------------
-          Dark charcoal background, no stock photo, no aspirational copy.
-          The trustworthy-local anchor lives in the eyebrow and headline.
-          The search bar is the primary action, with quick city chips below
-          for buyers who want to start by browsing a specific area.
-          ==================================================================== */}
+      {/* HERO — search bar IS the call to action */}
       <section className="relative bg-secondary text-white overflow-hidden">
-        {/* Subtle gradient background — replace with a real Crandell-listed
-            Queen Creek property photo when one is available. Keeps things
-            on-brand without committing to a specific stock image. */}
         <div
           className="absolute inset-0 bg-gradient-to-br from-secondary via-secondary to-[#1a2332]"
           aria-hidden="true"
@@ -158,24 +141,20 @@ export default function Home() {
 
         <div className="crandell-container relative py-16 md:py-24 lg:py-28">
           <div className="max-w-3xl">
-            {/* Eyebrow — establishes brand and intent */}
             <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-3">
               Crandell Home Intelligence
             </p>
 
-            {/* Headline — Roboto 400 (editorial, light) per brand */}
             <h1 className="text-white font-normal leading-tight mb-4" style={{ fontSize: 'var(--crandell-text-display)' }}>
               Finding your<br />perfect home.
             </h1>
 
-            {/* Subhead — concrete and local-anchored, no maintenance commitments */}
             <p className="text-white/80 text-lg md:text-xl mb-8 max-w-xl">
               Search every active listing in Arizona,
               {totalListings ? <> backed by <span className="font-semibold text-white">{totalListings.toLocaleString?.() || totalListings}</span> homes from ARMLS</> : ' backed by the full ARMLS feed'},
               and shown to you by the Crandell Real Estate Team.
             </p>
 
-            {/* SEARCH BAR — the primary CTA */}
             <form
               onSubmit={handleHeroSearch}
               className="bg-white rounded-lg shadow-2xl p-2 flex items-center gap-2 max-w-2xl"
@@ -196,7 +175,6 @@ export default function Home() {
               </Button>
             </form>
 
-            {/* Quick-filter city chips — start a search by area */}
             <div className="flex flex-wrap gap-2 mt-5">
               <span className="text-white/60 text-sm self-center mr-1">Browse by city:</span>
               {QUICK_CITIES.map((city) => (
@@ -213,14 +191,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ====================================================================
-          MEET THE TEAM STRIP
-          --------------------------------------------------------------------
-          The trustworthy-local anchor. Tanner and the team are visible
-          immediately below the hero, before any listings. This is the
-          single most important section in the entire homepage rebuild —
-          it's what separates HomeFind from a generic IDX clone.
-          ==================================================================== */}
+      {/* MEET THE TEAM STRIP */}
       <section className="bg-muted py-12 md:py-16">
         <div className="crandell-container">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
@@ -239,9 +210,6 @@ export default function Home() {
             </div>
 
             <div className="flex items-center gap-6">
-              {/* Team photo stack — placeholder paths.
-                  Replace files in public/team/ with real headshots
-                  (jpg or png, ~200x200px, square crop). */}
               <div className="flex -space-x-3">
                 {TEAM_MEMBERS.map((member) => (
                   <img
@@ -249,31 +217,30 @@ export default function Home() {
                     src={member.photo}
                     alt={member.name}
                     className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-white object-cover bg-muted shadow-md"
-                    onError={(e) => {
-                      // Graceful fallback while real headshots aren't yet uploaded
-                      e.target.style.display = 'none';
-                    }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
                   />
                 ))}
               </div>
 
-              <Button
-                variant="outline"
-                className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground whitespace-nowrap"
+              {/* Meet the team button — links to the main Crandell site */}
+              <a
+                href="https://crandellrealestate.com/our-team/"
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                Meet the team
-              </Button>
+                <Button
+                  variant="outline"
+                  className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground whitespace-nowrap"
+                >
+                  Meet the team
+                </Button>
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ====================================================================
-          FEATURED LISTINGS
-          --------------------------------------------------------------------
-          Existing functionality — same data fetch, same PropertyCard,
-          same favorite handling. Only the heading styling changes.
-          ==================================================================== */}
+      {/* FEATURED LISTINGS */}
       <section className="py-16 md:py-20">
         <div className="crandell-container">
           {featuredProperties.length > 0 ? (
@@ -315,7 +282,6 @@ export default function Home() {
             </div>
           ) : null}
 
-          {/* Recently Viewed Section — preserved from original */}
           {user && (
             <RecentlyViewed
               user={user}
@@ -324,7 +290,6 @@ export default function Home() {
             />
           )}
 
-          {/* Browse All Homes CTA — uses brand primary */}
           <div className="text-center mt-12">
             <Link to={createPageUrl('Search')}>
               <Button className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold px-10 py-6 text-lg">
