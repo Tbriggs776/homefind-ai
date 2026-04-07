@@ -118,10 +118,6 @@ function FiltersForm({ filters, onChange, onBatchChange }) {
             <Input placeholder="Enter city" value={filters.city} onChange={(e) => onChange('city', e.target.value)} className="border-slate-300" />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-500">State</Label>
-            <div className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm text-slate-600">Arizona (AZ)</div>
-          </div>
-          <div className="space-y-1">
             <Label className="text-xs text-slate-500">Zip Code</Label>
             <Input placeholder="Enter zip code" value={filters.zip_code} onChange={(e) => onChange('zip_code', e.target.value)} className="border-slate-300" />
           </div>
