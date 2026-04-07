@@ -239,14 +239,30 @@ const SELECT = [
 
 // ─── Load / save cursor ─────────────────────────────────────────────────────
 async function loadCursor() {
-  const { data } = await supabaseAdmin.from('sync_cache').select('cache_value').eq('cache_key', CURSOR_KEY).single();
+  const { data, error } = await supabaseAdmin
+    .from('sync_cache')
+    .select('cache_value')
+    .eq('cache_key', CURSOR_KEY)
+    .maybeSingle();
+  if (error) {
+    console.error('[Sync] loadCursor error:', error);
+  }
   return data?.cache_value || {};
 }
 async function saveCursor(val: any) {
-  await supabaseAdmin.from('sync_cache').upsert(
-    { cache_key: CURSOR_KEY, cache_value: val, updated_at: new Date().toISOString() },
+  const { error } = await supabaseAdmin.from('sync_cache').upsert(
+    {
+      cache_key: CURSOR_KEY,
+      cache_value: val,
+      sync_key: CURSOR_KEY, // safety net: legacy column is now nullable but we still populate it
+      updated_at: new Date().toISOString(),
+    },
     { onConflict: 'cache_key' }
   );
+  if (error) {
+    console.error('[Sync] saveCursor FAILED:', error);
+    throw new Error(`Failed to save sync cursor: ${error.message}`);
+  }
 }
 
 // ─── Main handler ───────────────────────────────────────────────────────────
