@@ -18,6 +18,36 @@ import LoginGateModal from '../components/LoginGateModal';
 import ShareButton from '../components/properties/ShareButton';
 import PropertyCard from '../components/properties/PropertyCard';
 
+// ============================================================================
+// MORTGAGE PAYMENT CALCULATION
+// ----------------------------------------------------------------------------
+// Standard amortization formula:  M = P × [r(1+r)^n] / [(1+r)^n - 1]
+// Where P = principal, r = monthly rate, n = number of payments.
+// Returns monthly P&I (principal + interest) only — taxes, HOA, insurance
+// are added separately by the calling component.
+// ============================================================================
+function calculateMonthlyPI(homePrice, downPaymentPct, ratePct, termYears) {
+  const principal = homePrice * (1 - downPaymentPct / 100);
+  const monthlyRate = (ratePct / 100) / 12;
+  const numPayments = termYears * 12;
+
+  // Edge case: 0% interest → simple division
+  if (monthlyRate === 0) return principal / numPayments;
+
+  const factor = Math.pow(1 + monthlyRate, numPayments);
+  return (principal * monthlyRate * factor) / (factor - 1);
+}
+
+// Normalize HOA fee to a monthly amount based on the frequency string
+function normalizeHoaToMonthly(fee, frequency) {
+  if (!fee || fee <= 0) return 0;
+  const freq = (frequency || '').toLowerCase();
+  if (freq.includes('annual') || freq.includes('year')) return fee / 12;
+  if (freq.includes('quarter')) return fee / 3;
+  if (freq.includes('semi')) return fee / 6;
+  return fee;  // assume monthly if unspecified
+}
+
 export default function PropertyDetail() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -31,6 +61,13 @@ export default function PropertyDetail() {
   const [showLoginGate, setShowLoginGate] = useState(false);
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactSuccess, setContactSuccess] = useState(false);
+
+  // Mortgage calculator state — defaults match the conventional buyer profile
+  // (20% down, 30-year fixed, 6.5% rate). Buyers can adjust each value via the
+  // sliders/buttons in the calculator card on the right sidebar.
+  const [downPaymentPct, setDownPaymentPct] = useState(20);
+  const [loanTermYears, setLoanTermYears] = useState(30);
+  const [interestRate, setInterestRate] = useState(6.5);
 
   const urlParams = new URLSearchParams(window.location.search);
   const propertyId = urlParams.get('id');
@@ -502,6 +539,131 @@ export default function PropertyDetail() {
                   {property.county && <div><p className="text-sm text-muted-foreground mb-1">County</p><p className="font-semibold text-foreground">{property.county}</p></div>}
                 </CardContent>
               </Card>
+
+              {/* ================================================================
+                  MORTGAGE CALCULATOR
+                  ----------------------------------------------------------------
+                  Buyers want to know "what would this cost me per month" before
+                  they ask for a tour. Defaults match Zillow's conventional buyer
+                  profile (20% down, 30yr, 6.5%). Sliders + button group let
+                  buyers adjust each input. Total monthly payment is the loudest
+                  visual element.
+                  ================================================================ */}
+              {(() => {
+                const monthlyPI = calculateMonthlyPI(property.price, downPaymentPct, interestRate, loanTermYears);
+                const monthlyTax = property.tax_annual_amount > 0
+                  ? property.tax_annual_amount / 12
+                  : (property.price * 0.0065) / 12;  // estimate at Maricopa County average
+                const monthlyHoa = normalizeHoaToMonthly(property.hoa_fee, property.hoa_fee_frequency);
+                const monthlyInsurance = (property.price * 0.005) / 12;  // industry rule of thumb for AZ
+                const totalMonthly = monthlyPI + monthlyTax + monthlyHoa + monthlyInsurance;
+                const downPaymentAmount = property.price * (downPaymentPct / 100);
+
+                return (
+                  <Card className="shadow-md border-border">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <DollarSign className="h-5 w-5 text-primary" />
+                        <h3 className="font-semibold text-foreground">Monthly Payment</h3>
+                      </div>
+
+                      {/* Total monthly — the loudest visual element */}
+                      <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-5">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Estimated total</p>
+                        <p className="text-3xl font-bold text-foreground">
+                          {formatPrice(Math.round(totalMonthly))}
+                          <span className="text-base font-normal text-muted-foreground">/mo</span>
+                        </p>
+                      </div>
+
+                      {/* Down payment slider */}
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs text-muted-foreground font-medium">Down payment</label>
+                          <span className="text-xs font-semibold text-foreground">
+                            {downPaymentPct}% ({formatPrice(Math.round(downPaymentAmount))})
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="50"
+                          step="1"
+                          value={downPaymentPct}
+                          onChange={(e) => setDownPaymentPct(Number(e.target.value))}
+                          className="w-full accent-primary"
+                        />
+                      </div>
+
+                      {/* Loan term button group */}
+                      <div className="mb-4">
+                        <label className="text-xs text-muted-foreground font-medium block mb-2">Loan term</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[15, 20, 30].map((years) => (
+                            <button
+                              key={years}
+                              onClick={() => setLoanTermYears(years)}
+                              className={`py-2 px-3 rounded-md text-sm font-medium border transition-colors ${
+                                loanTermYears === years
+                                  ? 'bg-primary text-primary-foreground border-primary'
+                                  : 'bg-white text-foreground border-border hover:border-primary'
+                              }`}
+                            >
+                              {years} yr
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Interest rate slider */}
+                      <div className="mb-5">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs text-muted-foreground font-medium">Interest rate</label>
+                          <span className="text-xs font-semibold text-foreground">{interestRate.toFixed(3)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="3"
+                          max="9"
+                          step="0.125"
+                          value={interestRate}
+                          onChange={(e) => setInterestRate(Number(e.target.value))}
+                          className="w-full accent-primary"
+                        />
+                      </div>
+
+                      {/* Breakdown */}
+                      <div className="space-y-1.5 pt-4 border-t border-border text-sm">
+                        <div className="flex justify-between text-foreground/80">
+                          <span>Principal &amp; interest</span>
+                          <span className="font-medium">{formatPrice(Math.round(monthlyPI))}</span>
+                        </div>
+                        <div className="flex justify-between text-foreground/80">
+                          <span>
+                            Property tax
+                            {!(property.tax_annual_amount > 0) && <span className="text-muted-foreground/60 text-xs ml-1">(est.)</span>}
+                          </span>
+                          <span className="font-medium">{formatPrice(Math.round(monthlyTax))}</span>
+                        </div>
+                        {monthlyHoa > 0 && (
+                          <div className="flex justify-between text-foreground/80">
+                            <span>HOA</span>
+                            <span className="font-medium">{formatPrice(Math.round(monthlyHoa))}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-foreground/80">
+                          <span>Home insurance <span className="text-muted-foreground/60 text-xs">(est.)</span></span>
+                          <span className="font-medium">{formatPrice(Math.round(monthlyInsurance))}</span>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-muted-foreground/60 mt-3 italic">
+                        Estimate only. Doesn't include PMI (typically required if down payment is below 20%). Talk to Tanner for a real quote.
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
 
               {/* ARMLS attribution — legally required, visually demoted to footer-style block.
                   This satisfies ARMLS Rule 23.2.12 (display listing agent contact info)
