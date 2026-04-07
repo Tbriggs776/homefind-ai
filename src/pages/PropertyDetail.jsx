@@ -16,6 +16,7 @@ import { createPageUrl } from '@/utils';
 import AIAssistant from '../components/ai/AIAssistant';
 import LoginGateModal from '../components/LoginGateModal';
 import ShareButton from '../components/properties/ShareButton';
+import PropertyCard from '../components/properties/PropertyCard';
 
 export default function PropertyDetail() {
   const { user } = useAuth();
@@ -47,6 +48,50 @@ export default function PropertyDetail() {
       return data;
     },
     enabled: !!propertyId
+  });
+
+  // ============================================================================
+  // SIMILAR HOMES QUERY
+  // ----------------------------------------------------------------------------
+  // Fetches up to 6 properties matching the four things buyers actually
+  // compare on: same city, ±20% price, ±1 bedroom, has valid coordinates.
+  // Excludes the current property and only returns active/coming_soon
+  // listings. Cached by property ID so navigating between properties refetches
+  // automatically.
+  // ============================================================================
+  const { data: similarHomes = [] } = useQuery({
+    queryKey: ['similarHomes', propertyId, property?.city, property?.price, property?.bedrooms],
+    queryFn: async () => {
+      if (!property || !property.city || !property.price) return [];
+
+      const minPrice = property.price * 0.8;
+      const maxPrice = property.price * 1.2;
+      const minBeds = Math.max(0, (property.bedrooms || 0) - 1);
+      const maxBeds = (property.bedrooms || 0) + 1;
+
+      const { data, error } = await supabase
+        .from('properties')
+        .select('*')
+        .neq('id', property.id)
+        .ilike('city', property.city)
+        .gte('price', minPrice)
+        .lte('price', maxPrice)
+        .gte('bedrooms', minBeds)
+        .lte('bedrooms', maxBeds)
+        .in('status', ['active', 'coming_soon'])
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (error) {
+        console.error('Similar homes query failed:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!property?.city && !!property?.price,
+    staleTime: 60000  // cache for 1 minute — same property page revisits within a minute reuse the cached result
   });
 
   // Check if saved
@@ -493,6 +538,42 @@ export default function PropertyDetail() {
           </div>
         </div>
       </div>
+
+      {/* ======================================================================
+          SIMILAR HOMES RAIL
+          ----------------------------------------------------------------------
+          Up to 6 properties matching the same city, ±20% price, ±1 bedroom.
+          Reuses the upgraded PropertyCard component so each rail card shows
+          $/sqft, lot size, days on market, and the New badge automatically.
+          Hidden if zero matches found (no awkward "0 similar homes" state).
+          ====================================================================== */}
+      {similarHomes.length > 0 && (
+        <div className="bg-muted py-12 md:py-16">
+          <div className="crandell-container">
+            <div className="mb-8">
+              <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-2">
+                Comparable listings
+              </p>
+              <h2 className="text-2xl md:text-3xl font-normal text-foreground">
+                More homes in {property.city}
+              </h2>
+              <p className="text-muted-foreground mt-2 text-sm">
+                Similar size and price range, hand-picked by your search.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {similarHomes.map((similarProperty) => (
+                <PropertyCard
+                  key={similarProperty.id}
+                  property={similarProperty}
+                  user={user}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {user && property && (
         <AIAssistant user={user} contextData={{ currentProperty: { address: property.address, price: property.price, bedrooms: property.bedrooms, bathrooms: property.bathrooms } }} />
