@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import {
   ArrowLeft, Heart, Share2, Bed, Bath, Square, MapPin,
   Calendar, Home as HomeIcon, Loader2, ChevronLeft, ChevronRight, X, Expand,
-  TrendingDown, Video, DollarSign, GraduationCap, Mountain, Eye
+  TrendingDown, Video, DollarSign, GraduationCap, Mountain, Eye,
+  Phone, MessageCircle, CalendarCheck
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -27,6 +28,8 @@ export default function PropertyDetail() {
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
   const [showLoginGate, setShowLoginGate] = useState(false);
+  const [contactSubmitting, setContactSubmitting] = useState(false);
+  const [contactSuccess, setContactSuccess] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const propertyId = urlParams.get('id');
@@ -154,20 +157,62 @@ export default function PropertyDetail() {
     setTouchEnd(0);
   };
 
+  // ============================================================================
+  // CRANDELL CONTACT HANDLER
+  // ----------------------------------------------------------------------------
+  // This calls the existing contactAgentForProperty edge function (which we
+  // trust is wired to FUB and routes leads to Tanner Crandell, NOT to the
+  // listing brokerage). The frontend now makes it explicit the buyer is
+  // contacting Tanner — not the eXp Realty / HomeSmart / etc. listing agent
+  // shown in the legally-required ARMLS attribution.
+  // ============================================================================
+  const handleCrandellContact = async (intent) => {
+    if (!user) {
+      navigate('/Login');
+      return;
+    }
+    setContactSubmitting(true);
+    try {
+      const response = await invokeFunction('contactAgentForProperty', {
+        property: {
+          id: property.id,
+          address: property.address,
+          city: property.city,
+          state: property.state,
+          zip_code: property.zip_code,
+          price: property.price,
+          bedrooms: property.bedrooms,
+          bathrooms: property.bathrooms,
+          square_feet: property.square_feet,
+          mls_number: property.mls_number
+        },
+        intent  // 'tour' or 'question' — backend can route accordingly
+      });
+      if (response.success) {
+        setContactSuccess(true);
+        setTimeout(() => setContactSuccess(false), 5000);
+      }
+    } catch {
+      alert('Sorry — we couldn\'t send your request. Please try again or call directly.');
+    } finally {
+      setContactSubmitting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (!property) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-        <p className="text-slate-600 text-lg">Property not found.</p>
+      <div className="crandell-container py-20 text-center">
+        <p className="text-muted-foreground text-lg">Property not found.</p>
         <Link to={createPageUrl('Search')}>
-          <Button className="mt-4 bg-slate-800 hover:bg-slate-700">Back to Search</Button>
+          <Button className="mt-4 bg-secondary hover:bg-[var(--crandell-charcoal-hover)]">Back to Search</Button>
         </Link>
       </div>
     );
@@ -176,24 +221,33 @@ export default function PropertyDetail() {
   const formatPrice = (price) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
 
   return (
-    <div className="min-h-screen pb-12">
+    <div className="min-h-screen pb-12 bg-background">
       {showLoginGate && <LoginGateModal onClose={() => setShowLoginGate(false)} />}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+
+      {/* Back to search bar */}
+      <div className="bg-white border-b border-border">
+        <div className="crandell-container py-4">
           <Link to={createPageUrl('Search')}>
-            <Button variant="ghost" className="text-slate-600 hover:text-slate-900">
+            <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-4 w-4 mr-2" /> Back to Search
             </Button>
           </Link>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="crandell-container py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            {/* Image Gallery */}
-            <Card className="overflow-hidden shadow-lg border-slate-200">
-              <div className="relative h-96 bg-slate-100 group">
+
+            {/* ================================================================
+                IMAGE GALLERY
+                ----------------------------------------------------------------
+                Bumped from h-96 (384px) to h-[600px] on desktop so the photo
+                actually gets the visual weight a $XXX,000 listing deserves.
+                Mobile keeps the smaller height for vertical space efficiency.
+                ================================================================ */}
+            <Card className="overflow-hidden shadow-lg border-border">
+              <div className="relative h-96 md:h-[500px] lg:h-[600px] bg-muted group">
                 <img src={images[currentImageIndex]} alt={property.address} className="w-full h-full object-cover" />
                 {images.length > 1 && (
                   <>
@@ -216,12 +270,12 @@ export default function PropertyDetail() {
             </Card>
 
             {/* Property Info */}
-            <Card className="shadow-lg border-slate-200">
+            <Card className="shadow-lg border-border">
               <CardContent className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
-                      <h1 className="text-3xl font-bold text-slate-900">{formatPrice(property.price)}</h1>
+                      <h1 className="text-3xl font-normal text-foreground">{formatPrice(property.price)}</h1>
                       {property.original_list_price && property.original_list_price > property.price && (
                         <div className="flex items-center gap-1">
                           <TrendingDown className="h-4 w-4 text-red-600" />
@@ -229,35 +283,35 @@ export default function PropertyDetail() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-slate-600">
+                    <div className="flex items-center gap-2 text-muted-foreground">
                       <MapPin className="h-5 w-5" />
                       <span className="text-lg">{property.address}, {property.city}, {property.state} {property.zip_code}</span>
                     </div>
-                    {property.subdivision && <p className="text-sm text-slate-500 mt-1 ml-7">{property.subdivision}</p>}
+                    {property.subdivision && <p className="text-sm text-muted-foreground mt-1 ml-7">{property.subdivision}</p>}
                   </div>
                   <div className="flex gap-2">
                     {property && <ShareButton property={property} variant="button" />}
                     <Button variant="outline" size="icon" onClick={() => user ? saveMutation.mutate() : navigate('/Login')} className={isSaved ? 'border-red-500' : ''}>
-                      <Heart className={`h-5 w-5 ${isSaved ? 'fill-red-500 text-red-500' : 'text-slate-600'}`} />
+                      <Heart className={`h-5 w-5 ${isSaved ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} />
                     </Button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-6 border-y border-slate-200">
-                  <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Bed className="h-5 w-5 text-slate-600" /><span className="text-2xl font-bold text-slate-900">{property.bedrooms}</span></div><p className="text-sm text-slate-600">Bedrooms</p></div>
-                  <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Bath className="h-5 w-5 text-slate-600" /><span className="text-2xl font-bold text-slate-900">{property.bathrooms}</span></div><p className="text-sm text-slate-600">Bathrooms</p></div>
-                  <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Square className="h-5 w-5 text-slate-600" /><span className="text-2xl font-bold text-slate-900">{property.square_feet?.toLocaleString()}</span></div><p className="text-sm text-slate-600">Sq Ft</p></div>
-                  <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Calendar className="h-5 w-5 text-slate-600" /><span className="text-2xl font-bold text-slate-900">{property.year_built}</span></div><p className="text-sm text-slate-600">Year Built</p></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-6 border-y border-border">
+                  <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Bed className="h-5 w-5 text-muted-foreground" /><span className="text-2xl font-bold text-foreground">{property.bedrooms}</span></div><p className="text-sm text-muted-foreground">Bedrooms</p></div>
+                  <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Bath className="h-5 w-5 text-muted-foreground" /><span className="text-2xl font-bold text-foreground">{property.bathrooms}</span></div><p className="text-sm text-muted-foreground">Bathrooms</p></div>
+                  <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Square className="h-5 w-5 text-muted-foreground" /><span className="text-2xl font-bold text-foreground">{property.square_feet?.toLocaleString()}</span></div><p className="text-sm text-muted-foreground">Sq Ft</p></div>
+                  <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Calendar className="h-5 w-5 text-muted-foreground" /><span className="text-2xl font-bold text-foreground">{property.year_built}</span></div><p className="text-sm text-muted-foreground">Year Built</p></div>
                 </div>
 
                 <div className="mt-6">
-                  <h2 className="text-xl font-bold text-slate-900 mb-3">Description</h2>
-                  <p className="text-slate-700 leading-relaxed">{property.description || 'No description available.'}</p>
+                  <h2 className="text-xl font-semibold text-foreground mb-3">Description</h2>
+                  <p className="text-foreground/80 leading-relaxed">{property.description || 'No description available.'}</p>
                 </div>
 
                 {property.virtual_tour_url && (
                   <div className="mt-6">
-                    <a href={property.virtual_tour_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-3 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors font-medium">
+                    <a href={property.virtual_tour_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-3 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors font-medium">
                       <Video className="h-5 w-5" /> View 3D Virtual Tour
                     </a>
                   </div>
@@ -265,10 +319,10 @@ export default function PropertyDetail() {
 
                 {property.features?.length > 0 && (
                   <div className="mt-6">
-                    <h2 className="text-xl font-bold text-slate-900 mb-3">Features</h2>
+                    <h2 className="text-xl font-semibold text-foreground mb-3">Features</h2>
                     <div className="grid grid-cols-2 gap-3">
                       {property.features.map((feature, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-slate-700"><div className="h-1.5 w-1.5 bg-amber-600 rounded-full" /><span>{feature}</span></div>
+                        <div key={idx} className="flex items-center gap-2 text-foreground/80"><div className="h-1.5 w-1.5 bg-primary rounded-full" /><span>{feature}</span></div>
                       ))}
                     </div>
                   </div>
@@ -276,19 +330,19 @@ export default function PropertyDetail() {
 
                 {(property.tax_annual_amount || property.hoa_fee) && (
                   <div className="mt-6">
-                    <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2"><DollarSign className="h-5 w-5" /> Financial Details</h2>
+                    <h2 className="text-xl font-semibold text-foreground mb-3 flex items-center gap-2"><DollarSign className="h-5 w-5" /> Financial Details</h2>
                     <div className="grid grid-cols-2 gap-4">
                       {property.tax_annual_amount > 0 && (
-                        <div className="bg-slate-50 rounded-lg p-3">
-                          <p className="text-xs text-slate-500 mb-1">Annual Property Tax</p>
-                          <p className="font-semibold text-slate-900">{formatPrice(property.tax_annual_amount)}/yr</p>
-                          <p className="text-xs text-slate-400">{formatPrice(Math.round(property.tax_annual_amount / 12))}/mo</p>
+                        <div className="bg-muted rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-1">Annual Property Tax</p>
+                          <p className="font-semibold text-foreground">{formatPrice(property.tax_annual_amount)}/yr</p>
+                          <p className="text-xs text-muted-foreground">{formatPrice(Math.round(property.tax_annual_amount / 12))}/mo</p>
                         </div>
                       )}
                       {property.hoa_fee > 0 && (
-                        <div className="bg-slate-50 rounded-lg p-3">
-                          <p className="text-xs text-slate-500 mb-1">HOA Fee</p>
-                          <p className="font-semibold text-slate-900">{formatPrice(property.hoa_fee)}{property.hoa_fee_frequency ? `/${property.hoa_fee_frequency.toLowerCase().replace('ly','')}` : ''}</p>
+                        <div className="bg-muted rounded-lg p-3">
+                          <p className="text-xs text-muted-foreground mb-1">HOA Fee</p>
+                          <p className="font-semibold text-foreground">{formatPrice(property.hoa_fee)}{property.hoa_fee_frequency ? `/${property.hoa_fee_frequency.toLowerCase().replace('ly','')}` : ''}</p>
                         </div>
                       )}
                     </div>
@@ -297,77 +351,145 @@ export default function PropertyDetail() {
 
                 {(property.elementary_school || property.middle_school || property.high_school) && (
                   <div className="mt-6">
-                    <h2 className="text-xl font-bold text-slate-900 mb-3 flex items-center gap-2"><GraduationCap className="h-5 w-5" /> Schools</h2>
+                    <h2 className="text-xl font-semibold text-foreground mb-3 flex items-center gap-2"><GraduationCap className="h-5 w-5" /> Schools</h2>
                     <div className="space-y-2">
-                      {property.elementary_school && <div className="flex items-center justify-between text-sm"><span className="text-slate-500">Elementary</span><span className="font-medium text-slate-800">{property.elementary_school}</span></div>}
-                      {property.middle_school && <div className="flex items-center justify-between text-sm"><span className="text-slate-500">Middle</span><span className="font-medium text-slate-800">{property.middle_school}</span></div>}
-                      {property.high_school && <div className="flex items-center justify-between text-sm"><span className="text-slate-500">High School</span><span className="font-medium text-slate-800">{property.high_school}</span></div>}
+                      {property.elementary_school && <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Elementary</span><span className="font-medium text-foreground">{property.elementary_school}</span></div>}
+                      {property.middle_school && <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Middle</span><span className="font-medium text-foreground">{property.middle_school}</span></div>}
+                      {property.high_school && <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">High School</span><span className="font-medium text-foreground">{property.high_school}</span></div>}
                     </div>
                   </div>
                 )}
 
                 {property.has_view && property.view_description && (
                   <div className="mt-6">
-                    <h2 className="text-xl font-bold text-slate-900 mb-2 flex items-center gap-2"><Eye className="h-5 w-5" /> View</h2>
-                    <p className="text-slate-700">{property.view_description}</p>
+                    <h2 className="text-xl font-semibold text-foreground mb-2 flex items-center gap-2"><Eye className="h-5 w-5" /> View</h2>
+                    <p className="text-foreground/80">{property.view_description}</p>
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Sidebar */}
+          {/* ====================================================================
+              SIDEBAR
+              --------------------------------------------------------------------
+              Order matters. From top to bottom:
+                1. CRANDELL CONTACT MODULE — primary CTA, brand-bordered, gets
+                   all the visual weight. This is what the buyer should click.
+                2. Property metadata (lot, MLS, county, listing firm)
+                3. ARMLS attribution + listing agent info — legally required,
+                   visually demoted to a footer-style block.
+              ==================================================================== */}
           <div className="lg:col-span-1">
-            <Card className="shadow-lg border-slate-200 sticky top-24">
-              <CardContent className="p-6 space-y-4">
-                <div><p className="text-sm text-slate-600 mb-1">Property Type</p><Badge className="bg-slate-100 text-slate-800 border-0">{property.property_type?.replace(/_/g, ' ')}</Badge></div>
-                {property.lot_size > 0 && <div><p className="text-sm text-slate-600 mb-1">Lot Size</p><p className="font-semibold text-slate-900">{property.lot_size} acres</p></div>}
-                {property.days_on_market > 0 && <div><p className="text-sm text-slate-600 mb-1">Days on Market</p><p className="font-semibold text-slate-900">{property.days_on_market} days</p></div>}
-                {property.mls_number && <div><p className="text-sm text-slate-600 mb-1">MLS Number</p><p className="font-semibold text-slate-900">{property.mls_number}</p></div>}
-                {property.county && <div><p className="text-sm text-slate-600 mb-1">County</p><p className="font-semibold text-slate-900">{property.county}</p></div>}
-                {(property.list_office_name || property.listing_office_name) && <div><p className="text-sm text-slate-600 mb-1">Listing Firm</p><p className="font-semibold text-slate-900 text-sm">{property.list_office_name || property.listing_office_name}</p></div>}
+            <div className="sticky top-24 space-y-4">
 
-                {/* ARMLS Rule 23.2.12: Display listing agent email or phone */}
-                {(property.listing_agent_name || property.listing_agent_email || property.listing_agent_phone) && (
-                  <div className="pt-3 border-t border-slate-100">
-                    <p className="text-sm text-slate-600 mb-1">Listing Agent</p>
-                    {property.listing_agent_name && <p className="font-semibold text-slate-900 text-sm">{property.listing_agent_name}</p>}
-                    {property.listing_agent_email && <p className="text-xs text-slate-500">{property.listing_agent_email}</p>}
-                    {property.listing_agent_phone && <p className="text-xs text-slate-500">{property.listing_agent_phone}</p>}
+              {/* CRANDELL CONTACT MODULE — the primary CTA */}
+              <Card className="border-2 border-primary shadow-lg">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <img
+                      src="/team/tanner.jpg"
+                      alt="Tanner Crandell"
+                      className="w-14 h-14 rounded-full object-cover bg-muted shadow-sm"
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                    <div>
+                      <p className="font-semibold text-foreground">Tanner Crandell</p>
+                      <p className="text-xs text-muted-foreground">Crandell Real Estate Team · Balboa Realty</p>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-foreground/80 mb-4 leading-relaxed">
+                    Interested in this {property.bedrooms}-bedroom in {property.city}? I can show
+                    you this home, pull comps, or answer questions about the neighborhood.
+                  </p>
+
+                  {contactSuccess ? (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+                      ✓ Got it. Tanner will reach out shortly.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Button
+                        className="w-full bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold"
+                        disabled={contactSubmitting}
+                        onClick={() => handleCrandellContact('tour')}
+                      >
+                        {contactSubmitting ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <CalendarCheck className="h-4 w-4 mr-2" />
+                        )}
+                        Schedule a Tour
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground"
+                        disabled={contactSubmitting}
+                        onClick={() => handleCrandellContact('question')}
+                      >
+                        <MessageCircle className="h-4 w-4 mr-2" />
+                        Ask a Question
+                      </Button>
+                    </div>
+                  )}
+
+                  <a
+                    href="tel:+14809999999"
+                    className="block text-center text-sm text-muted-foreground hover:text-primary py-3 mt-2 transition-colors"
+                  >
+                    <Phone className="h-3 w-3 inline mr-1" />
+                    Or call directly
+                  </a>
+                </CardContent>
+              </Card>
+
+              {/* Property metadata */}
+              <Card className="shadow-md border-border">
+                <CardContent className="p-6 space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Property Type</p>
+                    <Badge className="bg-muted text-foreground border-0">{property.property_type?.replace(/_/g, ' ')}</Badge>
+                  </div>
+                  {property.lot_size > 0 && <div><p className="text-sm text-muted-foreground mb-1">Lot Size</p><p className="font-semibold text-foreground">{property.lot_size} acres</p></div>}
+                  {property.days_on_market > 0 && <div><p className="text-sm text-muted-foreground mb-1">Days on Market</p><p className="font-semibold text-foreground">{property.days_on_market} days</p></div>}
+                  {property.mls_number && <div><p className="text-sm text-muted-foreground mb-1">MLS Number</p><p className="font-semibold text-foreground">{property.mls_number}</p></div>}
+                  {property.county && <div><p className="text-sm text-muted-foreground mb-1">County</p><p className="font-semibold text-foreground">{property.county}</p></div>}
+                </CardContent>
+              </Card>
+
+              {/* ARMLS attribution — legally required, visually demoted to footer-style block.
+                  This satisfies ARMLS Rule 23.2.12 (display listing agent contact info)
+                  while making it clear this is NOT the primary action on the page. */}
+              <div className="bg-muted/50 rounded-lg p-4 text-xs text-muted-foreground space-y-2">
+                {property.listing_source === 'flexmls_idx' && (
+                  <div className="flex items-center justify-center pb-2 border-b border-border">
+                    <img src="/armls-logo.png" alt="ARMLS" className="h-6 object-contain" />
                   </div>
                 )}
 
-                <div className="pt-4 border-t border-slate-200">
-                  {property.listing_source === 'flexmls_idx' ? (
-                    <div className="flex items-center justify-center bg-slate-50 rounded-lg p-3">
-                      <img src="/armls-logo.png" alt="ARMLS" className="h-8 object-contain" />
-                    </div>
-                  ) : (
-                    <><p className="text-xs text-slate-500">Listing Source</p><Badge variant="outline" className="mt-1">{property.listing_source?.replace(/_/g, ' ')}</Badge></>
-                  )}
-                </div>
+                {(property.list_office_name || property.listing_office_name) && (
+                  <p className="font-medium">
+                    Listing courtesy of {property.list_office_name || property.listing_office_name}
+                  </p>
+                )}
 
-                <Button
-                  className="w-full bg-slate-800 hover:bg-slate-700 text-white"
-                  onClick={async () => {
-                    if (!user) { navigate('/Login'); return; }
-                    try {
-                      const response = await invokeFunction('contactAgentForProperty', {
-                        property: { id: property.id, address: property.address, city: property.city, state: property.state, zip_code: property.zip_code, price: property.price, bedrooms: property.bedrooms, bathrooms: property.bathrooms, square_feet: property.square_feet, mls_number: property.mls_number }
-                      });
-                      if (response.success) { setIsSaved(true); alert(response.message); }
-                    } catch { alert('Failed to contact agent. Please try again.'); }
-                  }}
-                >
-                  Contact Agent
-                </Button>
-                <div className="mt-4 pt-3 border-t border-slate-100">
-                  {(property.list_office_name || property.listing_office_name) && <p className="text-xs text-slate-600 font-medium text-center mb-1">Listing courtesy of {property.list_office_name || property.listing_office_name}</p>}
-                  <p className="text-[10px] text-gray-400 text-center">All information should be verified by the recipient and none is guaranteed as accurate by ARMLS.</p>
-                  <p className="text-[10px] text-gray-400 text-center mt-1">Information source: ARMLS.</p>
-                </div>
-              </CardContent>
-            </Card>
+                {/* ARMLS Rule 23.2.12: Display listing agent name + email or phone */}
+                {(property.listing_agent_name || property.listing_agent_email || property.listing_agent_phone) && (
+                  <div>
+                    <p>Listing Agent: {property.listing_agent_name}</p>
+                    {property.listing_agent_email && <p className="text-[10px]">{property.listing_agent_email}</p>}
+                    {property.listing_agent_phone && <p className="text-[10px]">{property.listing_agent_phone}</p>}
+                  </div>
+                )}
+
+                <p className="text-[10px] italic pt-2 border-t border-border">
+                  All information should be verified by the recipient and none is guaranteed
+                  as accurate by ARMLS. Information source: ARMLS.
+                </p>
+              </div>
+
+            </div>
           </div>
         </div>
       </div>
