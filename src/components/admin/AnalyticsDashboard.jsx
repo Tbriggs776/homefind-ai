@@ -16,9 +16,9 @@ import { supabase } from '@/api/supabaseClient';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
-const COLORS = ['#52ADEA', '#3a9dd8', '#1e7cc0', '#0c5fa8', '#06438a', '#8b5cf6', '#10b981', '#f59e0b'];
+const COLORS = ['#00AFE5', '#0095C4', '#007FA8', '#0c5fa8', '#06438a', '#8b5cf6', '#10b981', '#f59e0b'];
 
-function MetricCard({ title, value, change, icon: Icon, color = 'text-[#52ADEA]', subtext }) {
+function MetricCard({ title, value, change, icon: Icon, color = 'text-crandell-primary', subtext }) {
   const isPositive = change >= 0;
   return (
     <Card className="bg-white shadow border-slate-200">
@@ -382,7 +382,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
               onClick={() => setDateRange(d)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 dateRange === d
-                  ? 'bg-[#52ADEA] text-white'
+                  ? 'bg-crandell-primary text-white'
                   : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -399,7 +399,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
           value={viewsInRange.length.toLocaleString()}
           change={viewsChange}
           icon={Eye}
-          color="text-[#52ADEA]"
+          color="text-crandell-primary"
           subtext={`${avgViewsPerUser} avg per user`}
         />
         <MetricCard
@@ -489,8 +489,8 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
             <AreaChart data={dailyData}>
               <defs>
                 <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#52ADEA" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#52ADEA" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#00AFE5" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#00AFE5" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorFavs" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
@@ -506,7 +506,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
               <Legend />
-              <Area type="monotone" dataKey="Property Views" stroke="#52ADEA" fill="url(#colorViews)" strokeWidth={2} />
+              <Area type="monotone" dataKey="Property Views" stroke="#00AFE5" fill="url(#colorViews)" strokeWidth={2} />
               <Area type="monotone" dataKey="Favorites" stroke="#ef4444" fill="url(#colorFavs)" strokeWidth={2} />
               <Area type="monotone" dataKey="AI Chats" stroke="#10b981" fill="url(#colorChats)" strokeWidth={2} />
             </AreaChart>
@@ -532,7 +532,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                   <XAxis type="number" tick={{ fontSize: 10 }} />
                   <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={80} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#52ADEA" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="count" fill="#00AFE5" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -551,7 +551,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                 <XAxis type="number" tick={{ fontSize: 10 }} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#52ADEA" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="count" fill="#00AFE5" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -589,7 +589,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
               <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={2} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
-              <Bar dataKey="views" fill="#52ADEA" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="views" fill="#00AFE5" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -624,7 +624,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                         </div>
                       </div>
                     </div>
-                    <Badge className="bg-[#52ADEA]/10 text-[#52ADEA] border-0 text-xs">{u.views} views</Badge>
+                    <Badge className="bg-crandell-primary/10 text-crandell-primary border-0 text-xs">{u.views} views</Badge>
                   </div>
                 ))}
               </div>
@@ -636,7 +636,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
         <Card className="bg-white shadow border-slate-200">
           <CardHeader>
             <CardTitle className="text-slate-800 text-base flex items-center gap-2">
-              <Home className="h-4 w-4 text-[#52ADEA]" />
+              <Home className="h-4 w-4 text-crandell-primary" />
               Top Viewed Properties
             </CardTitle>
           </CardHeader>
@@ -654,7 +654,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="text-xs font-bold text-slate-400 w-5 flex-shrink-0">#{i + 1}</span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate group-hover:text-[#52ADEA] transition-colors">
+                        <p className="text-sm font-medium text-slate-800 truncate group-hover:text-crandell-primary transition-colors">
                           {p.address}{p.city ? `, ${p.city}` : ''}
                         </p>
                         {p.price > 0 && (
@@ -667,12 +667,12 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <div className="h-2 bg-slate-100 rounded-full w-16 overflow-hidden">
                         <div
-                          className="h-2 bg-[#52ADEA] rounded-full"
+                          className="h-2 bg-crandell-primary rounded-full"
                           style={{ width: `${(p.views / topPropertiesByViews[0].views) * 100}%` }}
                         />
                       </div>
                       <span className="text-sm font-semibold text-slate-700 w-8 text-right">{p.views}</span>
-                      <ExternalLink className="h-3 w-3 text-slate-300 group-hover:text-[#52ADEA]" />
+                      <ExternalLink className="h-3 w-3 text-slate-300 group-hover:text-crandell-primary" />
                     </div>
                   </Link>
                 ))}

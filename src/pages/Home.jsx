@@ -117,7 +117,7 @@ export default function Home() {
         <div className="py-20 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-bold text-cyan-500 mb-6">
+              <h2 className="text-4xl md:text-5xl font-bold text-crandell-primary mb-6">
                 Find Your Perfect Home
               </h2>
               <p className="text-lg text-slate-700 max-w-4xl mx-auto leading-relaxed">
@@ -129,8 +129,8 @@ export default function Home() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
               <div className="text-center p-6">
-                <div className="h-16 w-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <MapPin className="h-8 w-8 text-cyan-600" />
+                <div className="h-16 w-16 bg-crandell-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <MapPin className="h-8 w-8 text-crandell-primary" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-4">Smart Search</h3>
                 <p className="text-slate-600">
@@ -139,8 +139,8 @@ export default function Home() {
               </div>
 
               <div className="text-center p-6">
-                <div className="h-16 w-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Heart className="h-8 w-8 text-cyan-600" />
+                <div className="h-16 w-16 bg-crandell-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Heart className="h-8 w-8 text-crandell-primary" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-4">Save Favorites</h3>
                 <p className="text-slate-600">
@@ -149,8 +149,8 @@ export default function Home() {
               </div>
 
               <div className="text-center p-6">
-                <div className="h-16 w-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <HomeIcon className="h-8 w-8 text-cyan-600" />
+                <div className="h-16 w-16 bg-crandell-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <HomeIcon className="h-8 w-8 text-crandell-primary" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-4">AI Assistance</h3>
                 <p className="text-slate-600">
@@ -189,7 +189,7 @@ export default function Home() {
             </p>
             <div className="mt-6">
               <Link to={createPageUrl('Search')}>
-                <Button size="lg" className="bg-[#52ADEA] hover:bg-[#3a9dd8] text-white text-lg px-8 py-6 font-semibold">
+                <Button size="lg" className="bg-crandell-primary hover:bg-crandell-primary-hover text-white text-lg px-8 py-6 font-semibold">
                   Search All Homes
                 </Button>
               </Link>
@@ -204,7 +204,7 @@ export default function Home() {
         {featuredProperties.length > 0 ? (
           <div className="mb-16">
             <div className="text-center mb-12">
-              <h2 className="text-4xl md:text-5xl font-bold text-cyan-500 mb-4">Our Featured Listings</h2>
+              <h2 className="text-4xl md:text-5xl font-bold text-crandell-primary mb-4">Our Featured Listings</h2>
               <p className="text-lg text-slate-700 max-w-3xl mx-auto">
                 Hand-picked properties from our Balboa Realty agents. For the full Arizona MLS with {totalListings || 'thousands of'} active listings, use our search.
               </p>
@@ -245,7 +245,7 @@ export default function Home() {
         {/* CTA Section */}
         <div className="text-center">
           <Link to={createPageUrl('Search')}>
-            <Button className="bg-cyan-500 hover:bg-cyan-600 text-white font-semibold px-10 py-6 text-lg">
+            <Button className="bg-crandell-primary hover:bg-crandell-primary-hover text-white font-semibold px-10 py-6 text-lg">
               Browse All Homes
             </Button>
           </Link>

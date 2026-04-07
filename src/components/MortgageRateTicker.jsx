@@ -86,7 +86,7 @@ export default function MortgageRateTicker() {
     <div className="bg-gray-900 text-white overflow-hidden border-t border-gray-700" style={{ height: '36px' }}>
       <div className="flex items-center h-full">
         {/* Label */}
-        <div className="flex-shrink-0 bg-[#52ADEA] px-3 h-full flex items-center z-10">
+        <div className="flex-shrink-0 bg-crandell-primary px-3 h-full flex items-center z-10">
           <span className="text-xs font-bold tracking-wide whitespace-nowrap">MORTGAGE RATES</span>
         </div>
 

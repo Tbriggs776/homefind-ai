@@ -23,8 +23,8 @@ export default function LoginGateModal({ onClose }) {
           <X className="h-4 w-4 text-gray-500" />
         </button>
 
-        <div className="h-16 w-16 bg-[#52ADEA]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-          <Lock className="h-8 w-8 text-[#52ADEA]" />
+        <div className="h-16 w-16 bg-crandell-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Lock className="h-8 w-8 text-crandell-primary" />
         </div>
 
         <h2 className="text-xl font-bold text-gray-900 mb-2">View All Photos</h2>
@@ -33,7 +33,7 @@ export default function LoginGateModal({ onClose }) {
         </p>
 
         <Button
-          className="w-full bg-[#52ADEA] hover:bg-[#3a9dd8] text-white font-semibold mb-3"
+          className="w-full bg-crandell-primary hover:bg-crandell-primary-hover text-white font-semibold mb-3"
           onClick={handleLogin}
         >
           Sign Up — It's Free

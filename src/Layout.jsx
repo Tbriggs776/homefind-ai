@@ -75,8 +75,8 @@ export default function Layout({ children, currentPageName }) {
                       variant="ghost"
                       className={`flex items-center gap-2 select-none ${
                         isActive
-                          ? 'bg-[#52ADEA]/10 text-[#52ADEA]'
-                          : 'text-black hover:text-[#52ADEA] hover:bg-[#52ADEA]/10'
+                          ? 'bg-crandell-primary/10 text-crandell-primary'
+                          : 'text-black hover:text-crandell-primary hover:bg-crandell-primary/10'
                       }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -92,7 +92,7 @@ export default function Layout({ children, currentPageName }) {
               {!user && (
                 <Link to="/Login">
                   <Button
-                    className="bg-[#52ADEA] hover:bg-[#3a9dd8] text-white select-none font-semibold"
+                    className="bg-crandell-primary hover:bg-crandell-primary-hover text-white select-none font-semibold"
                   >
                     Sign In
                   </Button>
@@ -211,7 +211,7 @@ export default function Layout({ children, currentPageName }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
-              <h3 className="text-[#52ADEA] font-bold text-lg mb-2">Crandell Real Estate Team</h3>
+              <h3 className="text-crandell-primary font-bold text-lg mb-2">Crandell Real Estate Team</h3>
               <p className="text-sm text-gray-400 font-medium">Balboa Realty</p>
               <p className="text-sm text-gray-400 mt-2">
                 Your premier destination for finding the perfect home in Arizona.

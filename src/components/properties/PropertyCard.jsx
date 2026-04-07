@@ -62,7 +62,7 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
                 <Badge className="bg-amber-600 text-white border-0">Pending</Badge>
               )}
               {property.is_featured && (
-                <Badge className="bg-[#52ADEA] text-white border-0">Featured</Badge>
+                <Badge className="bg-crandell-primary text-white border-0">Featured</Badge>
               )}
               {property.original_list_price && property.original_list_price > property.price && (
                 <Badge className="bg-red-600 text-white border-0 flex items-center gap-1">
@@ -140,7 +140,7 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
                 <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
                 <span>{property.address}, {property.city}, {property.state}</span>
                 {property._distance != null && (
-                  <span className="ml-auto text-xs text-[#52ADEA] font-medium whitespace-nowrap">
+                  <span className="ml-auto text-xs text-crandell-primary font-medium whitespace-nowrap">
                     {property._distance < 1 ? `${(property._distance * 5280).toFixed(0)} ft` : `${property._distance.toFixed(1)} mi`}
                   </span>
                 )}
