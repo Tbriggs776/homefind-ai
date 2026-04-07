@@ -354,26 +354,19 @@ export default function Search() {
         </div>
       )}
 
-      {/* Hero Section */}
-      <div className="relative h-[40vh] overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: 'url(https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1920&q=80)',
-          }}
-        >
-          <div className="absolute inset-0 bg-black/40"></div>
-        </div>
-
-        <div className="relative z-10 h-full flex items-center justify-center">
-          <div className="text-center max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h1 className="text-white text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
-              Find Your Dream Home
-            </h1>
-            <p className="text-white text-lg md:text-xl">
-              Search active ARMLS listings with intelligent AI-powered search
-            </p>
-          </div>
+      {/* Sticky Search Bar */}
+      <div className="sticky top-14 md:top-16 z-30 bg-white border-b border-slate-200 shadow-sm">
+        <div className="crandell-container py-3">
+          <input
+            type="text"
+            placeholder="City, neighborhood, or address"
+            className="w-full max-w-md px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--crandell-primary)] focus:border-transparent"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.target.value.trim()) {
+                handleFilterChange({ ...filters, city: e.target.value.trim() });
+              }
+            }}
+          />
         </div>
       </div>
 
