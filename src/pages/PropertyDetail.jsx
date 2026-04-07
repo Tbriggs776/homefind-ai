@@ -369,7 +369,14 @@ export default function PropertyDetail() {
                       <MapPin className="h-5 w-5" />
                       <span className="text-lg">{property.address}, {property.city}, {property.state} {property.zip_code}</span>
                     </div>
-                    {property.subdivision && <p className="text-sm text-muted-foreground mt-1 ml-7">{property.subdivision}</p>}
+                    {property.subdivision && (
+                      <Link
+                        to={`${createPageUrl('Search')}?subdivision=${encodeURIComponent(property.subdivision)}`}
+                        className="inline-block text-sm text-primary hover:text-[var(--crandell-primary-hover)] hover:underline mt-1 ml-7 font-medium"
+                      >
+                        {property.subdivision} →
+                      </Link>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     {property && <ShareButton property={property} variant="button" />}

@@ -57,11 +57,13 @@ function getInitialFilters(savedFilters) {
   const urlParams = new URLSearchParams(window.location.search);
   const cityParam = urlParams.get('city');
   const qParam = urlParams.get('q');
+  const subdivisionParam = urlParams.get('subdivision');
 
-  if (cityParam || qParam) {
+  if (cityParam || qParam || subdivisionParam) {
     return {
       ...(savedFilters || {}),
-      city: cityParam || qParam || ''
+      ...(cityParam || qParam ? { city: cityParam || qParam || '' } : {}),
+      ...(subdivisionParam ? { subdivision: subdivisionParam } : {})
     };
   }
 
