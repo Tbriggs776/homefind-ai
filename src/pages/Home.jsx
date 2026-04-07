@@ -2,12 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { supabase, invokeFunction } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, Loader2, Home as HomeIcon, Heart } from 'lucide-react';
+import { Loader2, Search, MapPin, ArrowRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import PropertyCard from '../components/properties/PropertyCard';
 import RecentlyViewed from '../components/home/RecentlyViewed';
+
+// Quick-filter chips for the East Valley cities Crandell specializes in.
+// Click to deep-link into the search page with the city pre-filtered.
+const QUICK_CITIES = [
+  'Queen Creek',
+  'San Tan Valley',
+  'Gilbert',
+  'Mesa',
+  'Chandler',
+];
+
+// Team members for the "Meet the Team" strip below the hero.
+// Replace photo paths with real headshots once available — drop the files
+// into public/team/ and they'll resolve automatically.
+const TEAM_MEMBERS = [
+  { name: 'Tanner Crandell', role: 'Team Lead', photo: '/team/tanner.jpg' },
+  { name: 'Denver Lane', role: 'Broker', photo: '/team/denver.jpg' },
+  { name: 'Crandell Team', role: 'Agents', photo: '/team/team-3.jpg' },
+];
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
@@ -16,10 +34,10 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [savedPropertyIds, setSavedPropertyIds] = useState([]);
   const [totalListings, setTotalListings] = useState('');
+  const [heroSearchValue, setHeroSearchValue] = useState('');
 
   useEffect(() => {
     const initPage = async () => {
-      // Fetch featured properties (works for all users)
       setLoading(true);
       try {
         const response = await invokeFunction('getFeaturedListings', {});
@@ -33,7 +51,7 @@ export default function Home() {
         setLoading(false);
       }
 
-      // If authenticated, do user-specific tasks
+      // Authenticated-user side effects (preserved from original file)
       if (user) {
         try { await invokeFunction('markUserActive', { userId: user.id }); } catch {}
         try { await invokeFunction('sendWelcomeEmail', { userId: user.id }); } catch {}
@@ -78,179 +96,244 @@ export default function Home() {
     }
   };
 
-  if (!isAuthenticated) {
-    // Not authenticated - show landing page
-    return (
-      <div className="min-h-screen bg-white">
-        {/* Hero Section with Background Image */}
-        <div className="relative h-[70vh] md:h-[80vh] overflow-hidden">
-          <div
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{
-              backgroundImage: 'url(https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=80)',
-            }}
-          >
-            <div className="absolute inset-0 bg-black/30"></div>
-          </div>
+  const handleHeroSearch = (e) => {
+    e.preventDefault();
+    const trimmed = heroSearchValue.trim();
+    if (trimmed) {
+      // Pass the search query as a URL param so the search page picks it up
+      navigate(`${createPageUrl('Search')}?q=${encodeURIComponent(trimmed)}`);
+    } else {
+      navigate(createPageUrl('Search'));
+    }
+  };
 
-          <div className="relative z-10 h-full flex items-center justify-center">
-            <div className="text-center max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h1 className="text-white text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
-                Unlock Your<br />
-                <span className="text-6xl md:text-7xl lg:text-8xl">DREAM HOME</span>
-              </h1>
-              <div className="mt-12">
-                <Link to={createPageUrl('Search')}>
-                  <Button
-                    size="lg"
-                    className="bg-white text-slate-900 hover:bg-slate-100 text-lg px-10 py-7 select-none font-semibold"
-                  >
-                    FIND YOUR HOME
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
+  const handleCityChip = (city) => {
+    navigate(`${createPageUrl('Search')}?city=${encodeURIComponent(city)}`);
+  };
 
-        {/* Find Your Perfect Home Section */}
-        <div className="py-20 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-bold text-cyan-500 mb-6">
-                Find Your Perfect Home
-              </h2>
-              <p className="text-lg text-slate-700 max-w-4xl mx-auto leading-relaxed">
-                Looking for the ideal property? Our powerful property search tool makes it easy to discover your dream home.
-                Whether you're a first-time homebuyer, a growing family, or seeking an investment opportunity, our listings
-                cover a wide range of options. Start your search and get one step closer to unlocking your new home.
-              </p>
-            </div>
+  const firstName = user?.full_name?.split(' ')[0];
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
-              <div className="text-center p-6">
-                <div className="h-16 w-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <MapPin className="h-8 w-8 text-cyan-600" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-4">Smart Search</h3>
-                <p className="text-slate-600">
-                  Find properties that match your exact criteria with advanced filtering options
-                </p>
-              </div>
-
-              <div className="text-center p-6">
-                <div className="h-16 w-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Heart className="h-8 w-8 text-cyan-600" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-4">Save Favorites</h3>
-                <p className="text-slate-600">
-                  Keep track of properties you love and get notified about updates
-                </p>
-              </div>
-
-              <div className="text-center p-6">
-                <div className="h-16 w-16 bg-cyan-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <HomeIcon className="h-8 w-8 text-cyan-600" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-4">AI Assistance</h3>
-                <p className="text-slate-600">
-                  Get personalized recommendations powered by artificial intelligence
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Authenticated - show properties carousel
   return (
-    <div className="min-h-screen bg-white">
-      {/* Welcome Hero with Background */}
-      <div className="relative h-[50vh] overflow-hidden mb-12">
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: 'url(https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=80)',
-          }}
-        >
-          <div className="absolute inset-0 bg-black/40"></div>
-        </div>
+    <div className="min-h-screen bg-background">
 
-        <div className="relative z-10 h-full flex items-center justify-center">
-          <div className="text-center px-4">
-            <h1 className="text-white text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
-              Welcome, {user?.full_name?.split(' ')[0] || 'Friend'}!
-            </h1>
-            <p className="text-white text-xl md:text-2xl flex items-center justify-center gap-2">
-              <HomeIcon className="h-6 w-6" />
-              {totalListings ? `Search ${totalListings} homes across Arizona` : 'Find your perfect home in Arizona'}
+      {/* ====================================================================
+          PERSONALIZED WELCOME BANNER (logged-in users only)
+          --------------------------------------------------------------------
+          Small, restrained, doesn't compete with the hero. Lives ABOVE the
+          hero so the primary search action is always the same first thing
+          every visitor sees regardless of auth state.
+          ==================================================================== */}
+      {user && firstName && (
+        <div className="bg-secondary text-secondary-foreground">
+          <div className="crandell-container py-2 flex items-center justify-between text-sm">
+            <span>
+              Welcome back, <span className="font-semibold">{firstName}</span>.
+            </span>
+            <Link
+              to={createPageUrl('SavedProperties')}
+              className="text-primary hover:underline flex items-center gap-1"
+            >
+              Your saved homes <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          HERO — search bar IS the call to action
+          --------------------------------------------------------------------
+          Dark charcoal background, no stock photo, no aspirational copy.
+          The trustworthy-local anchor lives in the eyebrow and headline.
+          The search bar is the primary action, with quick city chips below
+          for buyers who want to start by browsing a specific area.
+          ==================================================================== */}
+      <section className="relative bg-secondary text-white overflow-hidden">
+        {/* Subtle gradient background — replace with a real Crandell-listed
+            Queen Creek property photo when one is available. Keeps things
+            on-brand without committing to a specific stock image. */}
+        <div
+          className="absolute inset-0 bg-gradient-to-br from-secondary via-secondary to-[#1a2332]"
+          aria-hidden="true"
+        />
+
+        <div className="crandell-container relative py-16 md:py-24 lg:py-28">
+          <div className="max-w-3xl">
+            {/* Eyebrow — establishes brand and intent */}
+            <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-3">
+              Crandell Home Intelligence
             </p>
-            <div className="mt-6">
-              <Link to={createPageUrl('Search')}>
-                <Button size="lg" className="bg-[#52ADEA] hover:bg-[#3a9dd8] text-white text-lg px-8 py-6 font-semibold">
-                  Search All Homes
-                </Button>
-              </Link>
+
+            {/* Headline — Roboto 400 (editorial, light) per brand */}
+            <h1 className="text-white font-normal leading-tight mb-4" style={{ fontSize: 'var(--crandell-text-display)' }}>
+              Finding your<br />perfect home.
+            </h1>
+
+            {/* Subhead — concrete and local-anchored, no maintenance commitments */}
+            <p className="text-white/80 text-lg md:text-xl mb-8 max-w-xl">
+              Search every active listing in Arizona,
+              {totalListings ? <> backed by <span className="font-semibold text-white">{totalListings.toLocaleString?.() || totalListings}</span> homes from ARMLS</> : ' backed by the full ARMLS feed'},
+              and shown to you by the Crandell Real Estate Team.
+            </p>
+
+            {/* SEARCH BAR — the primary CTA */}
+            <form
+              onSubmit={handleHeroSearch}
+              className="bg-white rounded-lg shadow-2xl p-2 flex items-center gap-2 max-w-2xl"
+            >
+              <Search className="w-5 h-5 text-muted-foreground ml-3 flex-shrink-0" />
+              <input
+                type="text"
+                placeholder="City, neighborhood, ZIP, or address"
+                value={heroSearchValue}
+                onChange={(e) => setHeroSearchValue(e.target.value)}
+                className="flex-1 px-2 py-3 text-base text-foreground bg-transparent border-0 focus:outline-none focus:ring-0 min-w-0"
+              />
+              <Button
+                type="submit"
+                className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground px-6 py-6 font-semibold whitespace-nowrap"
+              >
+                Search Homes
+              </Button>
+            </form>
+
+            {/* Quick-filter city chips — start a search by area */}
+            <div className="flex flex-wrap gap-2 mt-5">
+              <span className="text-white/60 text-sm self-center mr-1">Browse by city:</span>
+              {QUICK_CITIES.map((city) => (
+                <button
+                  key={city}
+                  onClick={() => handleCityChip(city)}
+                  className="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-2 rounded-full transition-colors backdrop-blur-sm"
+                >
+                  {city}
+                </button>
+              ))}
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-
-        {/* Featured Properties Section */}
-        {featuredProperties.length > 0 ? (
-          <div className="mb-16">
-            <div className="text-center mb-12">
-              <h2 className="text-4xl md:text-5xl font-bold text-cyan-500 mb-4">Our Featured Listings</h2>
-              <p className="text-lg text-slate-700 max-w-3xl mx-auto">
-                Hand-picked properties from our Balboa Realty agents. For the full Arizona MLS with {totalListings || 'thousands of'} active listings, use our search.
+      {/* ====================================================================
+          MEET THE TEAM STRIP
+          --------------------------------------------------------------------
+          The trustworthy-local anchor. Tanner and the team are visible
+          immediately below the hero, before any listings. This is the
+          single most important section in the entire homepage rebuild —
+          it's what separates HomeFind from a generic IDX clone.
+          ==================================================================== */}
+      <section className="bg-muted py-12 md:py-16">
+        <div className="crandell-container">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
+            <div className="max-w-xl">
+              <p className="text-muted-foreground text-xs uppercase tracking-wider mb-2 font-semibold">
+                Local. Always.
+              </p>
+              <h2 className="text-foreground font-normal mb-3">
+                The Crandell Real Estate Team
+              </h2>
+              <p className="text-muted-foreground leading-relaxed">
+                We live in Queen Creek. We list in Queen Creek. We close in Queen Creek.
+                When you find a home on this site, you'll be touring it with us — not
+                a stranger from a referral pool.
               </p>
             </div>
 
-            {loading ? (
-              <div className="flex justify-center py-20">
-                <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 overflow-hidden">
-                {featuredProperties.map(property => (
-                  <PropertyCard
-                    key={property.id}
-                    property={property}
-                    onFavorite={handleFavorite}
-                    isFavorited={savedPropertyIds.includes(property.id)}
+            <div className="flex items-center gap-6">
+              {/* Team photo stack — placeholder paths.
+                  Replace files in public/team/ with real headshots
+                  (jpg or png, ~200x200px, square crop). */}
+              <div className="flex -space-x-3">
+                {TEAM_MEMBERS.map((member) => (
+                  <img
+                    key={member.name}
+                    src={member.photo}
+                    alt={member.name}
+                    className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-white object-cover bg-muted shadow-md"
+                    onError={(e) => {
+                      // Graceful fallback while real headshots aren't yet uploaded
+                      e.target.style.display = 'none';
+                    }}
                   />
                 ))}
               </div>
-            )}
-          </div>
-        ) : loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
-          </div>
-        ) : null}
 
-        {/* Recently Viewed Section */}
-        {user && (
-          <RecentlyViewed
-            user={user}
-            onFavorite={handleFavorite}
-            savedPropertyIds={savedPropertyIds}
-          />
-        )}
-
-        {/* CTA Section */}
-        <div className="text-center">
-          <Link to={createPageUrl('Search')}>
-            <Button className="bg-cyan-500 hover:bg-cyan-600 text-white font-semibold px-10 py-6 text-lg">
-              Browse All Homes
-            </Button>
-          </Link>
+              <Button
+                variant="outline"
+                className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground whitespace-nowrap"
+              >
+                Meet the team
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
+
+      {/* ====================================================================
+          FEATURED LISTINGS
+          --------------------------------------------------------------------
+          Existing functionality — same data fetch, same PropertyCard,
+          same favorite handling. Only the heading styling changes.
+          ==================================================================== */}
+      <section className="py-16 md:py-20">
+        <div className="crandell-container">
+          {featuredProperties.length > 0 ? (
+            <div className="mb-16">
+              <div className="text-center mb-12 max-w-2xl mx-auto">
+                <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-2">
+                  Hand-picked by our team
+                </p>
+                <h2 className="text-foreground font-normal mb-4">
+                  Our Featured Listings
+                </h2>
+                <p className="text-muted-foreground">
+                  A curated selection of properties from the Crandell Real Estate Team.
+                  For the full Arizona MLS with {totalListings || 'thousands of'} active
+                  listings, use our search.
+                </p>
+              </div>
+
+              {loading ? (
+                <div className="flex justify-center py-20">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {featuredProperties.map(property => (
+                    <PropertyCard
+                      key={property.id}
+                      property={property}
+                      onFavorite={handleFavorite}
+                      isFavorited={savedPropertyIds.includes(property.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : loading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : null}
+
+          {/* Recently Viewed Section — preserved from original */}
+          {user && (
+            <RecentlyViewed
+              user={user}
+              onFavorite={handleFavorite}
+              savedPropertyIds={savedPropertyIds}
+            />
+          )}
+
+          {/* Browse All Homes CTA — uses brand primary */}
+          <div className="text-center mt-12">
+            <Link to={createPageUrl('Search')}>
+              <Button className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold px-10 py-6 text-lg">
+                Browse all {totalListings ? totalListings.toLocaleString?.() || totalListings : ''} homes
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
