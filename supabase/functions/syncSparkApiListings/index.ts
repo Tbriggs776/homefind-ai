@@ -24,9 +24,9 @@ import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdm
  */
 
 const SPARK_REPL = 'https://replication.sparkapi.com/v1';
-const DB_BATCH = 200;
-const SPARK_LIMIT = 1000;
-const MAX_PAGES = 3;  // 3 pages × 1000 listings = ~3k listings per invocation, fits in compute budget. Cron resumes across runs via cursor.
+const DB_BATCH = 100;
+const SPARK_LIMIT = 250;  // Per-page limit. With ~60 fields + Photos expand, 250 listings ≈ 5MB JSON which fits in 256MB Edge Function memory
+const MAX_PAGES = 4;  // 4 pages × 250 listings = ~1000 listings per invocation. Cron resumes across runs.
 const TANNER_ID = 'pc295';
 const CURSOR_KEY = 'spark_sync_cursor';
 
