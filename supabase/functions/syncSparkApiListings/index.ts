@@ -362,17 +362,22 @@ serve(async (req) => {
 
       console.log(`[Sync] Page ${page + 1}: ${rows.length} upserted, ${listings.length - rows.length} skipped`);
 
-      // Extract next _skiptoken from response
-      const nextLink = data?.D?.Pagination?.['@odata.nextLink'] || '';
-      if (nextLink) {
-        try {
-          const nUrl = new URL(nextLink.startsWith('http') ? nextLink : `https://replication.sparkapi.com${nextLink}`);
-          lastSkipToken = currentSkipToken;
-          currentSkipToken = nUrl.searchParams.get('_skiptoken') || '';
-        } catch { currentSkipToken = ''; }
-      } else {
+      // Extract next _skiptoken — Spark Replication API uses the last result's Id as the cursor
+      // (NOT @odata.nextLink which is OData v4; Spark has its own format)
+      // If we got fewer results than the page size, we've reached the end
+      const totalRows = data?.D?.Pagination?.TotalRows ?? 0;
+      const lastListing = listings[listings.length - 1];
+      const lastId = lastListing?.Id || lastListing?.ListingKey || '';
+
+      if (listings.length < SPARK_LIMIT || !lastId) {
+        // Reached the end — no more pages
         currentSkipToken = '';
+      } else {
+        lastSkipToken = currentSkipToken;
+        currentSkipToken = lastId;
       }
+
+      console.log(`[Sync] Page ${page + 1}: ${rows.length} upserted | total in API: ${totalRows} | next skiptoken: ${currentSkipToken ? currentSkipToken.substring(0, 20) + '...' : '(end)'}`);
 
       // Save cursor after each page (resume on timeout)
       await saveCursor({
