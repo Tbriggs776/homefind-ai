@@ -435,11 +435,11 @@ export default function PropertyDetail() {
                   )}
 
                   <a
-                    href="tel:+14809999999"
+                    href="tel:+14805441539"
                     className="block text-center text-sm text-muted-foreground hover:text-primary py-3 mt-2 transition-colors"
                   >
                     <Phone className="h-3 w-3 inline mr-1" />
-                    Or call directly
+                    Or call (480) 544-1539
                   </a>
                 </CardContent>
               </Card>
