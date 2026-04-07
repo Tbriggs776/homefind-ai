@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PropertyCard from '../components/properties/PropertyCard';
 import SearchFilters from '../components/properties/SearchFilters';
 import PropertyMap from '../components/properties/PropertyMap';
-import RecommendedProperties from '../components/recommendations/RecommendedProperties';
 import AIAssistant from '../components/ai/AIAssistant';
 
 import NearbyBanner from '../components/properties/NearbyBanner';
@@ -41,11 +40,39 @@ function saveSessionState(state) {
   } catch {}
 }
 
+// Read URL params on initial mount. URL params take precedence over saved
+// session state — this is what makes the homepage hero search bar and city
+// chips actually filter results when the user clicks them.
+//
+//   /Search?q=Queen+Creek      → filters.city = "Queen Creek"
+//   /Search?city=Queen+Creek   → filters.city = "Queen Creek"
+//
+// We default ?q= to filling filters.city because that's the most common case
+// for a buyer typing a place name. If they typed an address it won't filter
+// precisely but will still narrow to the right city.
+function getInitialFilters(savedFilters) {
+  if (typeof window === 'undefined') return savedFilters || {};
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const cityParam = urlParams.get('city');
+  const qParam = urlParams.get('q');
+
+  // Only override saved state if URL has explicit params
+  if (cityParam || qParam) {
+    return {
+      ...(savedFilters || {}),
+      city: cityParam || qParam || ''
+    };
+  }
+
+  return savedFilters || {};
+}
+
 export default function Search() {
   const session = loadSessionState();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [filters, setFilters] = useState(session?.filters || {});
+  const [filters, setFilters] = useState(() => getInitialFilters(session?.filters));
   const [savedPropertyIds, setSavedPropertyIds] = useState([]);
   const [viewMode, setViewMode] = useState(session?.viewMode || 'grid');
   const [comparePropertyIds, setComparePropertyIds] = useState([]);
@@ -53,6 +80,7 @@ export default function Search() {
   const [totalCount, setTotalCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullStartY, setPullStartY] = useState(0);
+  const [sortBy, setSortBy] = useState(session?.sortBy || 'distance');
   const [userLocation, setUserLocation] = useState(() => {
     try {
       const saved = sessionStorage.getItem('user_location');
@@ -69,8 +97,8 @@ export default function Search() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    saveSessionState({ filters, viewMode, currentPage });
-  }, [filters, viewMode, currentPage]);
+    saveSessionState({ filters, viewMode, currentPage, sortBy });
+  }, [filters, viewMode, currentPage, sortBy]);
 
   const hasActiveFilters = filters.city || filters.zip_code || filters.bedrooms || filters.bathrooms ||
     filters.min_price || filters.max_price || filters.min_sqft || (filters.property_types?.length > 0) ||
@@ -78,7 +106,7 @@ export default function Search() {
 
   // Fetch properties with Supabase filtering and pagination
   const { data: properties = [], isLoading } = useQuery({
-    queryKey: ['properties', filters, currentPage, userLocation?.lat],
+    queryKey: ['properties', filters, currentPage, userLocation?.lat, sortBy],
     queryFn: async () => {
       let query = supabase.from('properties').select('*');
 
@@ -136,11 +164,22 @@ export default function Search() {
         }
       }
 
-      // Ordering
-      query = query.order('created_at', { ascending: false });
+      // Ordering — sortBy controls the primary sort
+      if (sortBy === 'price_low') {
+        query = query.order('price', { ascending: true });
+      } else if (sortBy === 'price_high') {
+        query = query.order('price', { ascending: false });
+      } else if (sortBy === 'newest') {
+        query = query.order('created_at', { ascending: false });
+      } else {
+        // 'distance' or default — order by created_at as the DB-level sort,
+        // then re-sort by distance in the application layer below
+        query = query.order('created_at', { ascending: false });
+      }
 
-      // If user has location and no specific filters, fetch more and sort by distance
-      if (userLocation && !hasActiveFilters && currentPage === 1) {
+      // If user has location and sortBy is 'distance' and no specific filters,
+      // fetch more and sort by distance in JS
+      if (userLocation && sortBy === 'distance' && !hasActiveFilters && currentPage === 1) {
         query = query.limit(500);
         const { data, error } = await query;
         if (error) throw error;
@@ -346,40 +385,25 @@ export default function Search() {
     }
   };
 
+  // Sort options for the dropdown
+  const sortOptions = [
+    { value: 'distance', label: userLocation ? 'Closest to you' : 'Newest first' },
+    { value: 'price_low', label: 'Price: Low to High' },
+    { value: 'price_high', label: 'Price: High to Low' },
+    { value: 'newest', label: 'Newest listings' },
+  ];
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background">
       {isRefreshing && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-white rounded-full px-4 py-2 shadow-lg">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-600" />
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {/* Hero Section */}
-      <div className="relative h-[40vh] overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: 'url(https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1920&q=80)',
-          }}
-        >
-          <div className="absolute inset-0 bg-black/40"></div>
-        </div>
-
-        <div className="relative z-10 h-full flex items-center justify-center">
-          <div className="text-center max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h1 className="text-white text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
-              Find Your Dream Home
-            </h1>
-            <p className="text-white text-lg md:text-xl">
-              Search active ARMLS listings with intelligent AI-powered search
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
+      {/* Main Content — kitchen hero deleted, page now starts directly with results */}
       <div
-        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+        className="crandell-container py-8"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -395,46 +419,70 @@ export default function Search() {
               onRequestLocation={requestLocation}
               onDismiss={dismissLocation}
             />
-            <div className="mb-6 flex items-center justify-between">
+
+            {/* Results header — count, sort dropdown, view toggle */}
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900">
+                <h2 className="text-2xl font-normal text-foreground">
                   {totalCount > PAGE_SIZE ? `${PAGE_SIZE}+` : totalCount} {totalCount === 1 ? 'Home' : 'Homes'} Available
                 </h2>
-                <p className="text-slate-600 mt-1">
-                  {userLocation && !hasActiveFilters ? 'Sorted by distance from you' : 'Showing active listings'}
-                </p>
+                {filters.city && (
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    in {filters.city}
+                  </p>
+                )}
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  variant={viewMode === 'grid' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('grid')}
-                  className={`select-none ${viewMode === 'grid' ? 'bg-slate-800' : ''}`}
-                >
-                  <Grid3x3 className="h-4 w-4 mr-2" />
-                  Grid
-                </Button>
-                <Button
-                  variant={viewMode === 'map' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('map')}
-                  className={`select-none ${viewMode === 'map' ? 'bg-slate-800' : ''}`}
-                >
-                  <Map className="h-4 w-4 mr-2" />
-                  Map
-                </Button>
+              <div className="flex items-center gap-3">
+                {/* Sort dropdown — replaces the static "Sorted by distance from you" text */}
+                <div className="flex items-center gap-2">
+                  <label htmlFor="sort-select" className="text-sm text-muted-foreground whitespace-nowrap">
+                    Sort:
+                  </label>
+                  <select
+                    id="sort-select"
+                    value={sortBy}
+                    onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}
+                    className="text-sm border border-border rounded-md px-3 py-1.5 bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    {sortOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* View toggle — Grid / Map */}
+                <div className="flex gap-2">
+                  <Button
+                    variant={viewMode === 'grid' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setViewMode('grid')}
+                    className={`select-none ${viewMode === 'grid' ? 'bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground' : ''}`}
+                  >
+                    <Grid3x3 className="h-4 w-4 mr-2" />
+                    Grid
+                  </Button>
+                  <Button
+                    variant={viewMode === 'map' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setViewMode('map')}
+                    className={`select-none ${viewMode === 'map' ? 'bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground' : ''}`}
+                  >
+                    <Map className="h-4 w-4 mr-2" />
+                    Map
+                  </Button>
+                </div>
               </div>
             </div>
 
             {isLoading ? (
               <div className="flex justify-center items-center py-20">
-                <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : properties.length === 0 ? (
               <div className="text-center py-20">
-                <p className="text-slate-600 text-lg">No properties match your search criteria.</p>
-                <p className="text-slate-500 mt-2">Try adjusting your filters.</p>
+                <p className="text-foreground text-lg">No properties match your search criteria.</p>
+                <p className="text-muted-foreground mt-2">Try adjusting your filters.</p>
               </div>
             ) : viewMode === 'map' ? (
               <PropertyMap
@@ -444,7 +492,7 @@ export default function Search() {
               />
             ) : (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {properties.map(property => (
                     <PropertyCard
                       key={property.id}
@@ -469,7 +517,7 @@ export default function Search() {
                       <ChevronLeft className="h-4 w-4" />
                       Previous
                     </Button>
-                    <span className="text-slate-600 font-medium">
+                    <span className="text-foreground font-medium">
                       Page {currentPage}
                     </span>
                     <Button
@@ -486,24 +534,21 @@ export default function Search() {
               </>
             )}
 
-            {user && !isLoading && properties.length > 0 && (
-              <RecommendedProperties
-                user={user}
-                savedPropertyIds={savedPropertyIds}
-                onFavorite={handleFavorite}
-              />
-            )}
+            {/* RecommendedProperties rail removed — it was showing random unrelated
+                listings on a search results page, which confused the filter state.
+                Recommendations belong on detail pages as "Similar Homes" scoped to
+                the current property, not on a search results page. */}
           </div>
         </div>
       </div>
 
-      {/* Compare Bar */}
+      {/* Compare Bar — preserved as-is, buyers ask for this feature */}
       {comparePropertyIds.length > 0 && (
         <div
           className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 md:bottom-6"
           style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
         >
-          <div className="bg-slate-900 text-white rounded-full shadow-2xl px-6 py-4 flex items-center gap-4">
+          <div className="bg-secondary text-secondary-foreground rounded-full shadow-2xl px-6 py-4 flex items-center gap-4">
             <Scale className="h-5 w-5" />
             <span className="font-medium">
               {comparePropertyIds.length} {comparePropertyIds.length === 1 ? 'property' : 'properties'} selected
@@ -511,7 +556,7 @@ export default function Search() {
             <div className="flex items-center gap-2">
               {comparePropertyIds.length >= 2 && (
                 <Link to={createPageUrl('PropertyCompare') + `?ids=${comparePropertyIds.join(',')}`}>
-                  <Button size="sm" className="bg-white text-slate-900 hover:bg-slate-100 select-none">
+                  <Button size="sm" className="bg-white text-secondary hover:bg-gray-100 select-none">
                     Compare Now
                   </Button>
                 </Link>
@@ -520,13 +565,13 @@ export default function Search() {
                 size="sm"
                 variant="ghost"
                 onClick={() => setComparePropertyIds([])}
-                className="text-white hover:bg-white/20 select-none"
+                className="text-secondary-foreground hover:bg-white/20 select-none"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
             {comparePropertyIds.length < 2 && (
-              <span className="text-slate-300 text-sm">Select at least 2 properties</span>
+              <span className="text-secondary-foreground/70 text-sm">Select at least 2 properties</span>
             )}
             {comparePropertyIds.length >= 4 && (
               <span className="text-amber-300 text-sm">Max 4 properties</span>
@@ -535,7 +580,7 @@ export default function Search() {
         </div>
       )}
 
-      {/* AI Assistant */}
+      {/* AI Assistant — preserved with all props including onApplyFilters */}
       {user && (
         <AIAssistant
           user={user}
