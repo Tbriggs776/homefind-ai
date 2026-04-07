@@ -427,12 +427,11 @@ export default function Search() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-1">
-            <SearchFilters onFilterChange={handleFilterChange} initialFilters={filters} />
-          </div>
+        <div className="space-y-6">
+          {/* Filter chips — full-width row above the results */}
+          <SearchFilters onFilterChange={handleFilterChange} initialFilters={filters} />
 
-          <div className="lg:col-span-3">
+          <div>
             <NearbyBanner
               locationStatus={locationStatus}
               onRequestLocation={requestLocation}
