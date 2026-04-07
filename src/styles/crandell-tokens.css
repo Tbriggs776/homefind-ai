@@ -1,0 +1,291 @@
+/* ============================================================================
+   CRANDELL DESIGN TOKENS
+   ----------------------------------------------------------------------------
+   Source of truth for Crandell Real Estate Team brand identity.
+   Values extracted from crandellrealestate.com on 2026-04-07.
+
+   USAGE:
+     1. Drop this file at: src/styles/crandell-tokens.css
+     2. Import at the top of src/index.css (before any other styles):
+          @import './styles/crandell-tokens.css';
+     3. Replace hardcoded color/font values throughout components with
+        these CSS variables (see migration-patch.md for find/replace list).
+     4. Update tailwind.config.js theme.extend to reference these tokens
+        (see tailwind-config-additions.js).
+
+   PRINCIPLE:
+     Every brand decision lives in this file. If a component needs a color,
+     it pulls from --crandell-* — never hardcodes hex. This is the difference
+     between a Base44 template and a designed product.
+   ========================================================================== */
+
+:root {
+  /* --------------------------------------------------------------------------
+     BRAND COLORS
+     -------------------------------------------------------------------------- */
+
+  /* Primary cyan-blue — the Crandell brand color from the main site.
+     Use for: primary CTAs, active nav state, key highlights, brand accents,
+     headline accents, link color, focus rings. */
+  --crandell-primary: #00AFE5;
+  --crandell-primary-hover: #0095C4;
+  --crandell-primary-pressed: #007FA8;
+  --crandell-primary-foreground: #FFFFFF;
+
+  /* Charcoal — used on the main site for secondary CTAs and body headlines.
+     Use for: secondary buttons, main headlines, footer background, dark
+     surfaces. NOT pure black — pure black feels harsh against the cyan. */
+  --crandell-charcoal: #303030;
+  --crandell-charcoal-hover: #1F1F1F;
+  --crandell-charcoal-foreground: #FFFFFF;
+
+  /* Neutral surface colors — slightly warmer than pure white to match
+     the existing main site's #FEFEFE body background. */
+  --crandell-surface: #FEFEFE;          /* page background */
+  --crandell-surface-raised: #FFFFFF;   /* card background */
+  --crandell-surface-sunken: #F5F7FA;   /* filter bar bg, input bg */
+  --crandell-border: #E5E8EC;           /* card borders, dividers */
+  --crandell-border-strong: #C8CED6;    /* input borders, table borders */
+
+  /* Text colors */
+  --crandell-text: #0A0A0A;             /* primary body text */
+  --crandell-text-muted: #5A6270;       /* secondary text, captions, labels */
+  --crandell-text-subtle: #8A92A0;      /* placeholder text, hints */
+
+  /* Status colors — used for listing badges and form states */
+  --crandell-status-active: #16A34A;    /* "Active" badge — keep existing */
+  --crandell-status-pending: #F59E0B;   /* "Pending" / "Under Contract" */
+  --crandell-status-sold: #6B7280;      /* "Sold" / "Off Market" */
+  --crandell-status-featured: #00AFE5;  /* "Featured" — same as primary */
+
+  /* Semantic feedback colors */
+  --crandell-success: #16A34A;
+  --crandell-warning: #F59E0B;
+  --crandell-error: #DC2626;
+  --crandell-info: var(--crandell-primary);
+
+  /* --------------------------------------------------------------------------
+     TYPOGRAPHY
+     --------------------------------------------------------------------------
+     The main Crandell site uses Roboto. We match it here so the two sites
+     feel like siblings. Roboto 400 for headlines (editorial, light) is the
+     existing brand voice — DO NOT switch to Roboto 700 just because that's
+     what most real estate sites do. The 400-weight headlines are part of
+     why the main site doesn't feel generic. */
+
+  --crandell-font-sans: 'Roboto', ui-sans-serif, system-ui, -apple-system,
+                        'Segoe UI', sans-serif;
+
+  /* Display / headline weight — intentionally NOT bold.
+     Matches main site editorial tone. */
+  --crandell-font-weight-display: 400;
+  --crandell-font-weight-heading: 500;
+  --crandell-font-weight-body: 400;
+  --crandell-font-weight-emphasis: 600;
+  --crandell-font-weight-strong: 700;
+
+  /* Type scale — uses clamp() so headlines scale fluidly between mobile
+     and desktop instead of needing breakpoint overrides. This is the
+     single most important fix for the "hero text is desktop-sized on
+     mobile" problem from the audit. */
+  --crandell-text-display: clamp(2rem, 5vw + 1rem, 4.5rem);   /* hero headlines */
+  --crandell-text-h1: clamp(1.75rem, 3vw + 1rem, 3rem);       /* page titles */
+  --crandell-text-h2: clamp(1.5rem, 2vw + 1rem, 2.25rem);     /* section headers */
+  --crandell-text-h3: clamp(1.25rem, 1.5vw + 0.75rem, 1.75rem);
+  --crandell-text-h4: clamp(1.125rem, 1vw + 0.625rem, 1.375rem);
+  --crandell-text-body-lg: 1.125rem;
+  --crandell-text-body: 1rem;
+  --crandell-text-body-sm: 0.875rem;
+  --crandell-text-caption: 0.75rem;
+
+  /* Line heights — tight for display, loose for body */
+  --crandell-leading-display: 1.05;
+  --crandell-leading-heading: 1.2;
+  --crandell-leading-body: 1.55;
+  --crandell-leading-tight: 1.3;
+
+  /* --------------------------------------------------------------------------
+     SPACING & LAYOUT
+     --------------------------------------------------------------------------
+     The biggest desktop bug from the audit: content jammed into a ~1100px
+     center column on a 1568px viewport. The fix is to define real container
+     widths that scale through xl and 2xl breakpoints, and to use these
+     variables instead of Tailwind's default max-w-7xl (which caps at 1280). */
+
+  --crandell-container-sm: 640px;
+  --crandell-container-md: 768px;
+  --crandell-container-lg: 1024px;
+  --crandell-container-xl: 1280px;
+  --crandell-container-2xl: 1536px;
+  --crandell-container-max: min(95vw, 1680px);  /* the new global max */
+
+  /* Page horizontal padding — scales with viewport */
+  --crandell-page-padding: clamp(1rem, 3vw, 2.5rem);
+
+  /* Spacing scale — matches Tailwind's default for consistency */
+  --crandell-space-1: 0.25rem;
+  --crandell-space-2: 0.5rem;
+  --crandell-space-3: 0.75rem;
+  --crandell-space-4: 1rem;
+  --crandell-space-6: 1.5rem;
+  --crandell-space-8: 2rem;
+  --crandell-space-12: 3rem;
+  --crandell-space-16: 4rem;
+  --crandell-space-24: 6rem;
+
+  /* --------------------------------------------------------------------------
+     RADII & SHADOWS
+     -------------------------------------------------------------------------- */
+
+  --crandell-radius-sm: 4px;
+  --crandell-radius-md: 8px;     /* listing cards, buttons */
+  --crandell-radius-lg: 12px;    /* hero search bar, large cards */
+  --crandell-radius-xl: 16px;    /* modals, drawers */
+  --crandell-radius-pill: 9999px; /* filter chips, status badges */
+
+  --crandell-shadow-sm: 0 1px 2px 0 rgba(10, 20, 40, 0.05);
+  --crandell-shadow-md: 0 4px 12px -2px rgba(10, 20, 40, 0.08),
+                        0 2px 4px -1px rgba(10, 20, 40, 0.04);
+  --crandell-shadow-lg: 0 12px 28px -8px rgba(10, 20, 40, 0.12),
+                        0 4px 12px -2px rgba(10, 20, 40, 0.06);
+  --crandell-shadow-xl: 0 24px 48px -12px rgba(10, 20, 40, 0.18);
+
+  /* Focus ring — uses brand color so focus is on-brand */
+  --crandell-focus-ring: 0 0 0 3px rgba(0, 175, 229, 0.35);
+
+  /* --------------------------------------------------------------------------
+     MOTION
+     -------------------------------------------------------------------------- */
+
+  --crandell-duration-fast: 120ms;
+  --crandell-duration-base: 200ms;
+  --crandell-duration-slow: 320ms;
+  --crandell-easing-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --crandell-easing-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* --------------------------------------------------------------------------
+     SHADCN/UI COMPATIBILITY OVERRIDES
+     --------------------------------------------------------------------------
+     The shadcn theme variables are HSL triplets without hsl() wrapper.
+     We override the defaults so any unmodified shadcn component (Button,
+     Card, Input, Dialog, etc.) automatically picks up Crandell colors. */
+
+  --background: 0 0% 99.6%;              /* matches --crandell-surface */
+  --foreground: 0 0% 4%;                 /* matches --crandell-text */
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 4%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 4%;
+
+  --primary: 195 100% 45%;               /* matches --crandell-primary #00AFE5 */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 0 0% 19%;                 /* matches --crandell-charcoal #303030 */
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 210 20% 96%;                  /* matches --crandell-surface-sunken */
+  --muted-foreground: 217 11% 40%;       /* matches --crandell-text-muted */
+
+  --accent: 195 100% 45%;                /* same as primary — single accent */
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 213 14% 91%;                 /* matches --crandell-border */
+  --input: 213 14% 91%;
+  --ring: 195 100% 45%;                  /* focus ring uses brand color */
+
+  --radius: 0.5rem;
+}
+
+/* ============================================================================
+   FONT IMPORT — Roboto from Google Fonts
+   ----------------------------------------------------------------------------
+   The main Crandell site loads Roboto. We match it. Loaded with display:swap
+   so text shows in fallback while Roboto loads, preventing FOIT.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+/* ============================================================================
+   GLOBAL BASE STYLES
+   ----------------------------------------------------------------------------
+   Apply the Crandell font and the responsive container max-width to body.
+   This is the single change that fixes the desktop width bug from the audit.
+   ========================================================================== */
+
+html {
+  font-family: var(--crandell-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--crandell-font-sans);
+  font-weight: var(--crandell-font-weight-body);
+  font-size: var(--crandell-text-body);
+  line-height: var(--crandell-leading-body);
+  color: var(--crandell-text);
+  background: var(--crandell-surface);
+}
+
+/* Headlines use the display weight (400 — intentionally light) and the
+   fluid clamp() type scale so they look right on every screen size. */
+h1, .h1 {
+  font-family: var(--crandell-font-sans);
+  font-weight: var(--crandell-font-weight-display);
+  font-size: var(--crandell-text-h1);
+  line-height: var(--crandell-leading-heading);
+  letter-spacing: -0.01em;
+}
+h2, .h2 {
+  font-family: var(--crandell-font-sans);
+  font-weight: var(--crandell-font-weight-display);
+  font-size: var(--crandell-text-h2);
+  line-height: var(--crandell-leading-heading);
+  letter-spacing: -0.005em;
+}
+h3, .h3 {
+  font-family: var(--crandell-font-sans);
+  font-weight: var(--crandell-font-weight-heading);
+  font-size: var(--crandell-text-h3);
+  line-height: var(--crandell-leading-tight);
+}
+h4, .h4 {
+  font-family: var(--crandell-font-sans);
+  font-weight: var(--crandell-font-weight-heading);
+  font-size: var(--crandell-text-h4);
+  line-height: var(--crandell-leading-tight);
+}
+
+/* The new global container — replaces max-w-7xl everywhere.
+   Use as: <div class="crandell-container">...</div>
+   On a 1568px viewport, this gives ~1490px of usable width
+   instead of the current ~1100px. That's the single biggest
+   visible change from the redesign. */
+.crandell-container {
+  width: 100%;
+  max-width: var(--crandell-container-max);
+  margin-inline: auto;
+  padding-inline: var(--crandell-page-padding);
+}
+
+/* Brand-tinted link color */
+a {
+  color: var(--crandell-primary);
+  text-decoration: none;
+  transition: color var(--crandell-duration-fast) var(--crandell-easing-out);
+}
+a:hover {
+  color: var(--crandell-primary-hover);
+}
+
+/* Brand-aligned focus ring on every focusable element.
+   Replaces the default browser outline with the on-brand cyan ring. */
+*:focus-visible {
+  outline: none;
+  box-shadow: var(--crandell-focus-ring);
+  border-radius: var(--crandell-radius-sm);
+}

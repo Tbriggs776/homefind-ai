@@ -7,7 +7,10 @@ module.exports = {
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
-  			sm: 'calc(var(--radius) - 4px)'
+  			sm: 'calc(var(--radius) - 4px)',
+  			'crandell-md': 'var(--crandell-radius-md)',
+  			'crandell-lg': 'var(--crandell-radius-lg)',
+  			'crandell-pill': 'var(--crandell-radius-pill)',
   		},
   		colors: {
   			background: 'hsl(var(--background))',
@@ -59,7 +62,39 @@ module.exports = {
   				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
   				border: 'hsl(var(--sidebar-border))',
   				ring: 'hsl(var(--sidebar-ring))'
-  			}
+  			},
+  			crandell: {
+  				primary: 'var(--crandell-primary)',
+  				'primary-hover': 'var(--crandell-primary-hover)',
+  				charcoal: 'var(--crandell-charcoal)',
+  				'charcoal-hover': 'var(--crandell-charcoal-hover)',
+  				surface: 'var(--crandell-surface)',
+  				'surface-raised': 'var(--crandell-surface-raised)',
+  				'surface-sunken': 'var(--crandell-surface-sunken)',
+  				border: 'var(--crandell-border)',
+  				text: 'var(--crandell-text)',
+  				'text-muted': 'var(--crandell-text-muted)',
+  				'status-active': 'var(--crandell-status-active)',
+  				'status-pending': 'var(--crandell-status-pending)',
+  				'status-featured': 'var(--crandell-status-featured)',
+  			},
+  		},
+  		fontFamily: {
+  			sans: ['Roboto', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+  		},
+  		maxWidth: {
+  			crandell: 'var(--crandell-container-max)',
+  		},
+  		screens: {
+  			xl: '1280px',
+  			'2xl': '1536px',
+  			'3xl': '1792px',
+  		},
+  		boxShadow: {
+  			'crandell-sm': 'var(--crandell-shadow-sm)',
+  			'crandell-md': 'var(--crandell-shadow-md)',
+  			'crandell-lg': 'var(--crandell-shadow-lg)',
+  			'crandell-xl': 'var(--crandell-shadow-xl)',
   		},
   		keyframes: {
   			'accordion-down': {
