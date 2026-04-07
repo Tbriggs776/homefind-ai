@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Bed, Bath, Square, MapPin, Heart, ChevronLeft, ChevronRight, TrendingDown, Video } from 'lucide-react';
+import { Bed, Bath, Square, MapPin, Heart, ChevronLeft, ChevronRight, TrendingDown, Video, Trees, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -19,6 +19,16 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
       maximumFractionDigits: 0,
     }).format(price);
   };
+
+  // Compute $/sqft. Guard against divide-by-zero and missing data.
+  const pricePerSqft = (property.price && property.square_feet > 0)
+    ? Math.round(property.price / property.square_feet)
+    : null;
+
+  // Days on market styling. <= 7 days gets a "New" badge in green
+  // (Zillow/Redfin pattern), 8-30 is neutral, >30 is muted.
+  const dom = property.days_on_market;
+  const isNewListing = dom > 0 && dom <= 7;
 
   const images = property.images?.length > 0
     ? property.images
@@ -43,7 +53,7 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
       transition={{ duration: 0.3 }}
     >
       {showLoginGate && <LoginGateModal onClose={() => setShowLoginGate(false)} />}
-      <Card className={`overflow-hidden hover:shadow-xl transition-all duration-300 bg-white group ${isComparing ? 'ring-2 ring-slate-800' : 'border-slate-200'}`}>
+      <Card className={`overflow-hidden hover:shadow-xl transition-all duration-300 bg-white group ${isComparing ? 'ring-2 ring-primary' : 'border-border'}`}>
         <Link to={createPageUrl('PropertyDetail') + `?id=${property.id}`}>
           <div className="relative h-56 overflow-hidden">
             <img
@@ -51,7 +61,7 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
               alt={property.address}
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
             />
-            <div className="absolute top-3 left-3 flex gap-2">
+            <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
               {property.status === 'active' && (
                 <Badge className="bg-green-600 text-white border-0">Active</Badge>
               )}
@@ -62,7 +72,7 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
                 <Badge className="bg-amber-600 text-white border-0">Pending</Badge>
               )}
               {property.is_featured && (
-                <Badge className="bg-[#52ADEA] text-white border-0">Featured</Badge>
+                <Badge className="bg-primary text-primary-foreground border-0">Featured</Badge>
               )}
               {property.original_list_price && property.original_list_price > property.price && (
                 <Badge className="bg-red-600 text-white border-0 flex items-center gap-1">
@@ -86,7 +96,7 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
                     onCompare(property);
                   }}
                   className={`h-9 px-3 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all text-xs font-medium ${
-                    isComparing ? 'bg-slate-800 text-white' : 'bg-white/90 text-slate-600'
+                    isComparing ? 'bg-primary text-primary-foreground' : 'bg-white/90 text-muted-foreground'
                   }`}
                 >
                   {isComparing ? 'Selected' : 'Compare'}
@@ -102,7 +112,7 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
               >
                 <Heart
                   className={`h-4 w-4 transition-colors ${
-                    isFavorited ? 'fill-red-500 text-red-500' : 'text-slate-600'
+                    isFavorited ? 'fill-red-500 text-red-500' : 'text-muted-foreground'
                   }`}
                 />
               </button>
@@ -133,21 +143,41 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
         <CardContent className="p-5">
           <Link to={createPageUrl('PropertyDetail') + `?id=${property.id}`}>
             <div className="mb-3">
-              <div className="text-2xl font-bold text-slate-900 mb-1">
-                {formatPrice(property.price)}
+              <div className="flex items-baseline gap-2">
+                <div className="text-2xl font-bold text-foreground">
+                  {formatPrice(property.price)}
+                </div>
+                {pricePerSqft && (
+                  <div className="text-sm text-muted-foreground">
+                    ${pricePerSqft}/sqft
+                  </div>
+                )}
               </div>
-              <div className="flex items-start gap-1 text-slate-600 text-sm">
+              <div className="flex items-start gap-1 text-muted-foreground text-sm mt-1">
                 <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
                 <span>{property.address}, {property.city}, {property.state}</span>
                 {property._distance != null && (
-                  <span className="ml-auto text-xs text-[#52ADEA] font-medium whitespace-nowrap">
+                  <span className="ml-auto text-xs text-primary font-medium whitespace-nowrap">
                     {property._distance < 1 ? `${(property._distance * 5280).toFixed(0)} ft` : `${property._distance.toFixed(1)} mi`}
                   </span>
                 )}
               </div>
+              {dom > 0 && (
+                <div className="flex items-center gap-1.5 mt-1.5 text-xs">
+                  {isNewListing && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">
+                      New
+                    </span>
+                  )}
+                  <span className={`flex items-center gap-1 ${dom > 30 ? 'text-muted-foreground/60' : 'text-muted-foreground'}`}>
+                    <Clock className="h-3 w-3" />
+                    {dom} {dom === 1 ? 'day' : 'days'} on market
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center gap-4 text-sm text-slate-600 mb-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mb-4">
               {property.bedrooms > 0 && (
                 <div className="flex items-center gap-1.5">
                   <Bed className="h-4 w-4" />
@@ -166,17 +196,23 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
                   <span>{property.square_feet?.toLocaleString()} sqft</span>
                 </div>
               )}
+              {property.lot_size > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <Trees className="h-4 w-4" />
+                  <span>{property.lot_size} ac</span>
+                </div>
+              )}
             </div>
 
             {property.features?.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {property.features.slice(0, 3).map((feature, idx) => (
-                  <Badge key={idx} variant="secondary" className="text-xs bg-slate-100 text-slate-700 border-0">
+                  <Badge key={idx} variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">
                     {feature}
                   </Badge>
                 ))}
                 {property.features.length > 3 && (
-                  <Badge variant="secondary" className="text-xs bg-slate-100 text-slate-700 border-0">
+                  <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground border-0">
                     +{property.features.length - 3} more
                   </Badge>
                 )}
@@ -184,23 +220,23 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
             )}
             <div className="mt-3 flex items-center gap-2">
               {property.listing_source === 'flexmls_idx' && (
-                <img 
-                  src="/armls-logo.png" 
-                  alt="ARMLS" 
+                <img
+                  src="/armls-logo.png"
+                  alt="ARMLS"
                   className="h-4 w-auto"
                 />
               )}
               {(property.list_office_name || property.listing_office_name) && (
-                <p className="text-[10px] text-gray-500 font-medium">Listed by: {property.list_office_name || property.listing_office_name}</p>
+                <p className="text-[10px] text-muted-foreground/70 font-medium">Listed by: {property.list_office_name || property.listing_office_name}</p>
               )}
             </div>
             {/* ARMLS Rule 23.2.12: listing agent email or phone must be displayed */}
             {(property.listing_agent_email || property.listing_agent_phone) && (
-              <p className="text-[10px] text-gray-400 mt-0.5">
+              <p className="text-[10px] text-muted-foreground/60 mt-0.5">
                 {property.listing_agent_email || property.listing_agent_phone}
               </p>
             )}
-            <p className="text-[10px] text-gray-400 mt-1">All information should be verified by the recipient and none is guaranteed as accurate by ARMLS.</p>
+            <p className="text-[10px] text-muted-foreground/60 mt-1">All information should be verified by the recipient and none is guaranteed as accurate by ARMLS.</p>
           </Link>
         </CardContent>
       </Card>
