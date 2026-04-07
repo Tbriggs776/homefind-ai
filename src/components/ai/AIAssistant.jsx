@@ -7,6 +7,63 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, invokeFunction } from '@/api/supabaseClient';
 import ReactMarkdown from 'react-markdown';
 
+// Normalize AI-returned filters to the exact field names Search.jsx expects.
+// This is defense-in-depth — even if the AI returns slightly off field names
+// (min_beds, pool, property_type), we translate to (bedrooms, private_pool, property_types).
+function normalizeFilters(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const f = {};
+
+  // Direct passthroughs
+  if (raw.city) f.city = String(raw.city);
+  if (raw.zip_code) f.zip_code = String(raw.zip_code);
+  if (raw.subdivision) f.subdivision = String(raw.subdivision);
+  if (raw.min_price != null) f.min_price = String(raw.min_price);
+  if (raw.max_price != null) f.max_price = String(raw.max_price);
+  if (raw.min_sqft != null) f.min_sqft = String(raw.min_sqft);
+
+  // Bedrooms — accept bedrooms, min_beds, beds, min_bedrooms
+  const beds = raw.bedrooms ?? raw.min_beds ?? raw.beds ?? raw.min_bedrooms;
+  if (beds != null) f.bedrooms = String(beds);
+
+  // Bathrooms — accept bathrooms, min_baths, baths, min_bathrooms
+  const baths = raw.bathrooms ?? raw.min_baths ?? raw.baths ?? raw.min_bathrooms;
+  if (baths != null) f.bathrooms = String(baths);
+
+  // Pool — accept private_pool, pool, has_pool. Default to private pool if just "pool".
+  if (raw.private_pool === true || raw.pool === true || raw.has_pool === true) {
+    f.private_pool = true;
+  }
+  if (raw.community_pool === true) f.community_pool = true;
+
+  // Property types — accept property_types (array) or property_type (string)
+  if (Array.isArray(raw.property_types) && raw.property_types.length > 0) {
+    f.property_types = raw.property_types;
+  } else if (typeof raw.property_type === 'string' && raw.property_type) {
+    f.property_types = [raw.property_type];
+  }
+
+  return f;
+}
+
+// Build a human-readable summary of the applied filters for chat confirmation.
+function summarizeFilters(f) {
+  const parts = [];
+  if (f.bedrooms) parts.push(`${f.bedrooms}+ bed`);
+  if (f.bathrooms) parts.push(`${f.bathrooms}+ bath`);
+  if (f.property_types?.length) parts.push(f.property_types.map(t => t.replace('_', ' ')).join('/'));
+  if (f.city) parts.push(f.city);
+  if (f.zip_code) parts.push(f.zip_code);
+  if (f.subdivision) parts.push(f.subdivision);
+  if (f.min_price && f.max_price) parts.push(`$${Number(f.min_price).toLocaleString()}–$${Number(f.max_price).toLocaleString()}`);
+  else if (f.min_price) parts.push(`$${Number(f.min_price).toLocaleString()}+`);
+  else if (f.max_price) parts.push(`under $${Number(f.max_price).toLocaleString()}`);
+  if (f.min_sqft) parts.push(`${Number(f.min_sqft).toLocaleString()}+ sqft`);
+  if (f.private_pool) parts.push('private pool');
+  if (f.community_pool) parts.push('community pool');
+  return parts.join(' · ');
+}
+
 export default function AIAssistant({ user, contextData = {}, onApplyFilters }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -112,7 +169,19 @@ What would you like to know?`
 
       // Apply filters if AI returned search criteria
       if (data?.filters && onApplyFilters) {
-        onApplyFilters(data.filters);
+        const normalized = normalizeFilters(data.filters);
+        if (Object.keys(normalized).length > 0) {
+          onApplyFilters(normalized);
+          // Inject a system confirmation so the user knows the filters were applied
+          const summary = summarizeFilters(normalized);
+          if (summary) {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `✅ **Filters applied:** ${summary}`,
+              isSystemConfirmation: true,
+            }]);
+          }
+        }
       }
     } catch (error) {
       setMessages(prev => [...prev, {

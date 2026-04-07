@@ -12,16 +12,43 @@ serve(async (req) => {
     // Build system prompt with property search context
     const systemPrompt = `You are a helpful real estate assistant for Crandell Real Estate Team / Balboa Realty, serving the Phoenix metro area (ARMLS listings).
 You help users find properties, understand neighborhoods, and answer real estate questions.
-When users describe what they're looking for, extract search filters and return them as JSON in a code block.
 
-Available filters: city, zip_code, min_price, max_price, min_beds, max_beds, min_baths, max_baths, min_sqft, max_sqft, property_type, pool, subdivision.
+When users describe what they're looking for, extract search filters and return them as JSON in a code block at the end of your message.
 
-Example: If someone says "3 bedroom homes in Gilbert under 500k with a pool", respond with helpful context AND:
+ALWAYS use these EXACT field names — no others — and only include keys the user actually mentioned:
+
+| Field | Type | Notes |
+|---|---|---|
+| city | string | E.g. "Queen Creek", "Gilbert", "Scottsdale" |
+| zip_code | string | 5-digit ZIP |
+| subdivision | string | E.g. "Eastmark", "Verrado" |
+| min_price | number | Dollars, no formatting |
+| max_price | number | Dollars, no formatting |
+| bedrooms | number | Treated as MINIMUM (e.g. 3 means "3+ bedrooms") |
+| bathrooms | number | Treated as MINIMUM |
+| min_sqft | number | Square feet |
+| property_types | array of strings | One or more of: "single_family", "condo", "townhouse", "multi_family", "land" |
+| private_pool | boolean | Set true if user wants a pool on the property |
+| community_pool | boolean | Set true ONLY if user specifically asks for a community/HOA pool |
+
+Examples:
+
+User: "Show me 3 bedroom homes in Gilbert under 500k with a pool"
+Response: Sure! Here are some 3+ bedroom homes in Gilbert under $500k with a pool. Take a look at the filtered results.
 \`\`\`json
-{"city": "Gilbert", "min_beds": 3, "max_price": 500000, "pool": true}
+{"city": "Gilbert", "bedrooms": 3, "max_price": 500000, "private_pool": true}
 \`\`\`
 
-Be conversational, knowledgeable about Arizona real estate, and always helpful. If you don't know something specific, say so honestly.`;
+User: "I want a 4 bedroom 3 bath single family in Queen Creek between 600k and 800k"
+Response: I'll filter for 4+ bedroom, 3+ bath single-family homes in Queen Creek between $600k and $800k.
+\`\`\`json
+{"city": "Queen Creek", "bedrooms": 4, "bathrooms": 3, "min_price": 600000, "max_price": 800000, "property_types": ["single_family"]}
+\`\`\`
+
+User: "What's the best neighborhood in Phoenix for families?"
+Response: (conversational answer with no filters JSON, since they didn't request a search)
+
+Only include the JSON block if the user is explicitly searching for properties. Be conversational, knowledgeable about Arizona real estate, and always helpful. If you don't know something specific, say so honestly.`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -49,14 +76,17 @@ Be conversational, knowledgeable about Arizona real estate, and always helpful. 
     }
 
     const openaiData = await openaiRes.json();
-    const reply = openaiData.choices?.[0]?.message?.content || 'I apologize, I had trouble processing that. Could you try again?';
+    const rawReply = openaiData.choices?.[0]?.message?.content || 'I apologize, I had trouble processing that. Could you try again?';
 
     // Extract filters from response if present
     let filters = null;
-    const jsonMatch = reply.match(/```json\n?([\s\S]*?)\n?```/);
+    const jsonMatch = rawReply.match(/```json\n?([\s\S]*?)\n?```/);
     if (jsonMatch) {
       try { filters = JSON.parse(jsonMatch[1]); } catch (_) { /* ignore parse errors */ }
     }
+
+    // Strip the JSON block from the user-facing reply
+    const reply = rawReply.replace(/```json\n?[\s\S]*?\n?```/g, '').trim();
 
     // Save chat message if userId provided
     if (userId) {
