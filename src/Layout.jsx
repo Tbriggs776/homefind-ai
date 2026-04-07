@@ -20,7 +20,6 @@ import { Button } from '@/components/ui/button';
 import { Home, Heart, LayoutDashboard, LogOut, User, Menu, X, Search } from 'lucide-react';
 
 import MortgageRateTicker from '@/components/MortgageRateTicker';
-import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Layout({ children, currentPageName }) {
   const { user, isAuthenticated, logout } = useAuth();
@@ -186,19 +185,13 @@ export default function Layout({ children, currentPageName }) {
         )}
       </header>
 
-      {/* Main Content with Page Transitions */}
+      {/* Main Content — plain div, no AnimatePresence wrapper.
+          The previous AnimatePresence + motion.div wrapper was breaking the
+          sticky header by transforming the page content during route
+          transitions. Page-transition animations were not worth the cost
+          of a broken sticky header on every scroll. */}
       <main className="pb-0">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
+        {children}
       </main>
 
       {/* Mortgage Rate Ticker - fixed at bottom on all devices */}
