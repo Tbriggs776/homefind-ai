@@ -83,11 +83,11 @@ export default function MortgageRateTicker() {
   const tickerItems = [...rates, ...rates]; // duplicate for seamless loop
 
   return (
-    <div className="bg-gray-900 text-white overflow-hidden border-t border-gray-700" style={{ height: '36px' }}>
+    <div className="bg-gray-900 text-white overflow-hidden border-t border-gray-700 max-w-[100vw]" style={{ height: '36px' }}>
       <div className="flex items-center h-full">
-        {/* Label */}
-        <div className="flex-shrink-0 bg-[#52ADEA] px-3 h-full flex items-center z-10">
-          <span className="text-xs font-bold tracking-wide whitespace-nowrap">MORTGAGE RATES</span>
+        {/* Label — uses brand primary instead of hardcoded #52ADEA */}
+        <div className="flex-shrink-0 bg-primary px-3 h-full flex items-center z-10">
+          <span className="text-xs font-bold tracking-wide whitespace-nowrap text-primary-foreground">MORTGAGE RATES</span>
         </div>
 
         {/* Scrolling ticker */}
