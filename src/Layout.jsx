@@ -53,7 +53,7 @@ export default function Layout({ children, currentPageName }) {
         className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm relative"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+        <div className="crandell-container relative">
           <div className="flex justify-between items-center h-14 md:h-16">
             {/* Logo */}
             <Link to={createPageUrl('Home')} className="flex items-center group">
@@ -208,7 +208,7 @@ export default function Layout({ children, currentPageName }) {
         className="bg-black text-gray-300 mt-20 mb-16 md:mb-0"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="crandell-container py-12">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
               <h3 className="text-crandell-primary font-bold text-lg mb-2">Crandell Real Estate Team</h3>

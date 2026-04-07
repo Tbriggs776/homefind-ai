@@ -164,7 +164,7 @@ export default function PropertyDetail() {
 
   if (!property) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-20 text-center">
+      <div className="crandell-container py-20 text-center">
         <p className="text-slate-600 text-lg">Property not found.</p>
         <Link to={createPageUrl('Search')}>
           <Button className="mt-4 bg-slate-800 hover:bg-slate-700">Back to Search</Button>
@@ -179,7 +179,7 @@ export default function PropertyDetail() {
     <div className="min-h-screen pb-12">
       {showLoginGate && <LoginGateModal onClose={() => setShowLoginGate(false)} />}
       <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="crandell-container py-4">
           <Link to={createPageUrl('Search')}>
             <Button variant="ghost" className="text-slate-600 hover:text-slate-900">
               <ArrowLeft className="h-4 w-4 mr-2" /> Back to Search
@@ -188,7 +188,7 @@ export default function PropertyDetail() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="crandell-container py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             {/* Image Gallery */}

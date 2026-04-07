@@ -89,7 +89,7 @@ export default function PropertyCompare() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="crandell-container">
         <div className="mb-8">
           <Link to={createPageUrl('Search')}><Button variant="ghost" className="mb-4"><ArrowLeft className="h-4 w-4 mr-2" /> Back to Search</Button></Link>
           <h1 className="text-3xl font-bold text-slate-900">Property Comparison</h1>

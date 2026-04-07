@@ -115,7 +115,7 @@ export default function Home() {
 
         {/* Find Your Perfect Home Section */}
         <div className="py-20 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="crandell-container">
             <div className="text-center mb-16">
               <h2 className="text-4xl md:text-5xl font-bold text-crandell-primary mb-6">
                 Find Your Perfect Home
@@ -198,7 +198,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+      <div className="crandell-container pb-16">
 
         {/* Featured Properties Section */}
         {featuredProperties.length > 0 ? (
