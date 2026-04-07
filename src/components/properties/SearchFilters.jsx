@@ -46,6 +46,7 @@ const EMPTY_FILTERS = {
   city: '',
   zip_code: '',
   subdivision: '',
+  query_text: '',
   price_preset: '',
   min_price: '',
   max_price: '',
@@ -150,7 +151,7 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
   // Sync with initialFilters changes (e.g., from URL params on Search.jsx mount)
   useEffect(() => {
     setFilters(prev => ({ ...prev, ...initialFilters }));
-  }, [initialFilters.city, initialFilters.subdivision, initialFilters.zip_code]);
+  }, [initialFilters.city, initialFilters.subdivision, initialFilters.zip_code, initialFilters.query_text]);
 
   // Apply on every change — no Apply button anymore
   const handleChange = (key, value) => {
@@ -183,6 +184,7 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
 
   // Active filter labels for the tag pill row below the chips
   const activeFilterTags = [];
+  if (filters.query_text) activeFilterTags.push({ key: 'query_text', label: `"${filters.query_text}"`, clearTo: '' });
   if (filters.city) activeFilterTags.push({ key: 'city', label: filters.city, clearTo: '' });
   if (filters.zip_code) activeFilterTags.push({ key: 'zip_code', label: filters.zip_code, clearTo: '' });
   if (filters.subdivision) activeFilterTags.push({ key: 'subdivision', label: filters.subdivision, clearTo: '' });
@@ -459,15 +461,17 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="City, ZIP, or subdivision"
-            value={filters.city || filters.zip_code || filters.subdivision || ''}
+            placeholder="Address, city, neighborhood, ZIP, or subdivision"
+            value={filters.query_text || filters.city || filters.subdivision || filters.zip_code || ''}
             onChange={(e) => {
               const val = e.target.value;
-              // Heuristic: if all digits, treat as zip; otherwise city
+              // Pure digits → precise zip_code match (faster, indexed column)
+              // Anything else → query_text fuzzy search across address, city,
+              // and subdivision so users find homes by neighborhood name
               if (/^\d+$/.test(val)) {
-                handleBatchChange({ zip_code: val, city: '', subdivision: '' });
+                handleBatchChange({ zip_code: val, query_text: '', city: '', subdivision: '' });
               } else {
-                handleBatchChange({ city: val, zip_code: '', subdivision: '' });
+                handleBatchChange({ query_text: val, zip_code: '', city: '', subdivision: '' });
               }
             }}
             className="pl-9"

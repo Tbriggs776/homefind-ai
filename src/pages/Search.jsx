@@ -62,12 +62,25 @@ function getInitialFilters(savedFilters) {
   if (cityParam || qParam || subdivisionParam) {
     return {
       ...(savedFilters || {}),
-      ...(cityParam || qParam ? { city: cityParam || qParam || '' } : {}),
-      ...(subdivisionParam ? { subdivision: subdivisionParam } : {})
+      // City chips from the homepage use ?city= → precise city filter
+      ...(cityParam ? { city: cityParam } : {}),
+      // Subdivision detail-page links use ?subdivision= → precise subdivision filter
+      ...(subdivisionParam ? { subdivision: subdivisionParam } : {}),
+      // Free-text hero search uses ?q= → fuzzy multi-column search
+      // (address OR city OR subdivision) so users can find homes by
+      // neighborhood/development name, not just official city
+      ...(qParam ? { query_text: qParam } : {})
     };
   }
 
   return savedFilters || {};
+}
+
+// Strip characters that would break PostgREST .or() syntax (commas, parens,
+// percent signs, backslashes). Apostrophes and hyphens are safe.
+function sanitizeQueryText(text) {
+  if (!text) return '';
+  return text.replace(/[,()%\\]/g, '').trim();
 }
 
 // Apply the current filter set to a Supabase query builder. Used by both
@@ -110,6 +123,20 @@ function applyFiltersToQuery(query, filters) {
   if (filters.zip_code) query = query.ilike('zip_code', `%${filters.zip_code}%`);
   if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision}%`);
 
+  // Fuzzy free-text search across address, city, AND subdivision.
+  // This is what powers the search input in SearchFilters and the homepage
+  // hero search bar. Lets users type "Spur Cross" and find homes in
+  // SPUR CROSS PHASE 2 PARCEL 6 even though that's a subdivision name,
+  // not a city name. Sanitized to prevent PostgREST syntax injection.
+  if (filters.query_text) {
+    const q = sanitizeQueryText(filters.query_text);
+    if (q.length > 0) {
+      query = query.or(
+        `address.ilike.%${q}%,city.ilike.%${q}%,subdivision.ilike.%${q}%`
+      );
+    }
+  }
+
   if (filters.school_name) {
     query = query.or(
       `elementary_school.ilike.%${filters.school_name}%,middle_school.ilike.%${filters.school_name}%,high_school.ilike.%${filters.school_name}%`
@@ -151,7 +178,7 @@ export default function Search() {
     saveSessionState({ filters, viewMode, currentPage, sortBy });
   }, [filters, viewMode, currentPage, sortBy]);
 
-  const hasActiveFilters = filters.city || filters.zip_code || filters.bedrooms || filters.bathrooms ||
+  const hasActiveFilters = filters.city || filters.zip_code || filters.subdivision || filters.query_text || filters.bedrooms || filters.bathrooms ||
     filters.min_price || filters.max_price || filters.min_sqft || (filters.property_types?.length > 0) ||
     filters.min_garage_spaces || filters.private_pool || filters.single_story;
 
