@@ -40,10 +40,62 @@ export default function Home() {
     const initPage = async () => {
       setLoading(true);
       try {
-        const response = await invokeFunction('getFeaturedListings', {});
-        const props = response?.properties || [];
-        setFeaturedProperties(props);
-        setTotalListings(response?.total_active_listings || '');
+        // ====================================================================
+        // FEATURED LISTINGS — scoped to Tanner Crandell's owned inventory
+        // --------------------------------------------------------------------
+        // Primary query: any active or coming_soon listing where Tanner is
+        // either the listing agent OR the co-listing agent. Matched by ARMLS
+        // agent ID (PC295) for exact, bulletproof matching — no name
+        // formatting fragility.
+        //
+        // Fallback: if Tanner has zero active listings (solo agents aren't
+        // always on-market), broaden to any listing from the Crandell Real
+        // Estate Team office so the section never renders empty.
+        // ====================================================================
+        const TANNER_AGENT_ID = 'PC295';
+
+        const primaryResult = await supabase
+          .from('properties')
+          .select('*')
+          .in('status', ['active', 'coming_soon'])
+          .not('latitude', 'is', null)
+          .not('longitude', 'is', null)
+          .or(`list_agent_mls_id.eq.${TANNER_AGENT_ID},co_list_agent_mls_id.eq.${TANNER_AGENT_ID}`)
+          .order('created_at', { ascending: false })
+          .limit(8);
+
+        let featured = primaryResult.data || [];
+
+        if (primaryResult.error) {
+          console.error('Featured listings query error:', primaryResult.error);
+        }
+
+        // Fallback to team listings if Tanner has no active inventory
+        if (featured.length === 0) {
+          const fallbackResult = await supabase
+            .from('properties')
+            .select('*')
+            .in('status', ['active', 'coming_soon'])
+            .not('latitude', 'is', null)
+            .not('longitude', 'is', null)
+            .ilike('list_office_name', '%Crandell%')
+            .order('created_at', { ascending: false })
+            .limit(8);
+          featured = fallbackResult.data || [];
+        }
+
+        setFeaturedProperties(featured);
+
+        // Total active listings count — used by the hero text
+        // ("Search every active listing, backed by X homes from ARMLS")
+        const countResult = await supabase
+          .from('properties')
+          .select('*', { count: 'exact', head: true })
+          .in('status', ['active', 'coming_soon']);
+
+        if (countResult.count !== null && countResult.count !== undefined) {
+          setTotalListings(countResult.count.toLocaleString());
+        }
       } catch (error) {
         console.error('Error fetching featured properties:', error);
         setFeaturedProperties([]);
@@ -247,14 +299,14 @@ export default function Home() {
             <div className="mb-16">
               <div className="text-center mb-12 max-w-2xl mx-auto">
                 <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-2">
-                  Hand-picked by our team
+                  Our current listings
                 </p>
                 <h2 className="text-foreground font-normal mb-4">
-                  Our Featured Listings
+                  Homes we're listing now
                 </h2>
                 <p className="text-muted-foreground">
-                  A curated selection of properties from the Crandell Real Estate Team.
-                  For the full Arizona MLS with {totalListings || 'thousands of'} active
+                  The homes Tanner and the Crandell Real Estate Team are currently
+                  representing across Arizona. For the full MLS with {totalListings || 'thousands of'} active
                   listings, use our search.
                 </p>
               </div>
