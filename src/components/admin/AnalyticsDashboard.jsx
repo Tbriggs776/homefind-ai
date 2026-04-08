@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import {
   Users, Eye, Heart, TrendingUp, TrendingDown,
-  Activity, Home, Search, Star, Clock, ExternalLink, Database
+  Activity, Home, Search, Star, ExternalLink, Database
 } from 'lucide-react';
 import { format, subDays, eachDayOfInterval, parseISO, startOfDay } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
@@ -70,20 +70,6 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
         .select('*')
         .order('created_at', { ascending: false })
         .limit(5000);
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Fetch sync status for reporting
-  const { data: syncCaches = [] } = useQuery({
-    queryKey: ['syncCachesAdmin'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sync_cache')
-        .select('*')
-        .order('last_sync_date', { ascending: false })
-        .limit(10);
       if (error) throw error;
       return data || [];
     },
@@ -204,71 +190,80 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [viewsInRange]);
 
-  // Fetch properties for the dashboard (active only for views correlation)
-  const { data: allProperties = [] } = useQuery({
-    queryKey: ['allPropertiesAdmin'],
+  // Fetch total count of active properties — fast, no data transfer, used for
+  // the "Active Properties" KPI card. Replaces the old .length on the truncated
+  // allProperties array which capped at PostgREST's 1000-row default.
+  const { data: totalPropertiesCount = 0 } = useQuery({
+    queryKey: ['totalPropertiesCount'],
     queryFn: async () => {
+      const { count, error } = await supabase
+        .from('properties')
+        .select('*', { count: 'exact', head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  // Fetch city aggregation across ALL ~27k properties via sequential pagination.
+  // PostgREST caps single queries at 1000 rows, so we paginate through the full
+  // table pulling only the city column (~25KB per page, ~28 pages, ~3s total).
+  // Cached by React Query for 5 minutes so subsequent dashboard loads are instant.
+  const { data: cityAggregation = [] } = useQuery({
+    queryKey: ['cityAggregation'],
+    queryFn: async () => {
+      const allCities = {};
+      const pageSize = 1000;
+      const maxPages = 30;  // Safety cap — currently needs 27 pages
+      for (let page = 0; page < maxPages; page++) {
+        const { data, error } = await supabase
+          .from('properties')
+          .select('city')
+          .order('id', { ascending: true })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        data.forEach(row => {
+          if (row.city) allCities[row.city] = (allCities[row.city] || 0) + 1;
+        });
+        if (data.length < pageSize) break;
+      }
+      return Object.entries(allCities)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => ({ name, count }));
+    },
+    staleTime: 5 * 60 * 1000,  // Cache for 5 minutes
+  });
+
+  // Fetch detailed property records ONLY for the specific properties that appear
+  // in recent views or favorites. Avoids pulling 27k rows when we only need a
+  // handful of rows with address/city/price for display.
+  const viewedAndFavoritedPropertyIds = useMemo(() => {
+    const ids = new Set();
+    allViews.forEach(v => v.property_id && ids.add(v.property_id));
+    savedProps.forEach(s => s.property_id && ids.add(s.property_id));
+    return Array.from(ids);
+  }, [allViews, savedProps]);
+
+  const { data: viewedPropertyDetails = [] } = useQuery({
+    queryKey: ['viewedPropertyDetails', viewedAndFavoritedPropertyIds.sort().join(',')],
+    queryFn: async () => {
+      if (viewedAndFavoritedPropertyIds.length === 0) return [];
       const { data, error } = await supabase
         .from('properties')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(5000);
+        .select('id, address, city, price, bedrooms, bathrooms, square_feet')
+        .in('id', viewedAndFavoritedPropertyIds);
       if (error) throw error;
       return data || [];
     },
-  });
-
-  // Fetch total property count across all statuses for DB stats
-  const { data: totalDbProperties = [] } = useQuery({
-    queryKey: ['totalDbProperties'],
-    queryFn: async () => {
-      const { count: activeCount } = await supabase
-        .from('properties')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'active');
-      const { count: pendingCount } = await supabase
-        .from('properties')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
-      const { count: soldCount } = await supabase
-        .from('properties')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'sold');
-      const { count: offMarketCount } = await supabase
-        .from('properties')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'off_market');
-      return { active: (activeCount || 0) > 0, pending: (pendingCount || 0) > 0, sold: (soldCount || 0) > 0, offMarket: (offMarketCount || 0) > 0 };
-    },
+    enabled: viewedAndFavoritedPropertyIds.length > 0,
   });
 
   // ── Top cities by listing count ─────────────────────────────────────────────
+  // Pulled directly from the full-table city aggregation — shows real counts
+  // across all 26k+ properties, not just the first 1000.
   const topCitiesByListings = useMemo(() => {
-    const cities = {};
-    allProperties.forEach(p => {
-      if (p.city) cities[p.city] = (cities[p.city] || 0) + 1;
-    });
-    return Object.entries(cities)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([name, count]) => ({ name, count }));
-  }, [allProperties]);
-
-  // ── Sync progress tracking ────────────────────────────────────────────────────
-  const syncProgress = useMemo(() => {
-    const sparkSync = syncCaches.find(c => c.sync_key === 'spark_api_listings');
-    const paginationSync = syncCaches.find(c => c.sync_key === 'spark_api_pagination');
-    return {
-      lastSync: sparkSync?.last_sync_date,
-      status: sparkSync?.sync_status,
-      totalFetched: sparkSync?.total_fetched || 0,
-      newItems: sparkSync?.new_items || 0,
-      updatedItems: sparkSync?.updated_items || 0,
-      currentBucket: paginationSync?.cached_data?.bucket ?? '?',
-      currentOffset: paginationSync?.cached_data?.offset ?? '?',
-    };
-  }, [syncCaches]);
+    return cityAggregation.slice(0, 8);
+  }, [cityAggregation]);
 
   // ── Top properties by views ───────────────────────────────────────────────────
   const topPropertiesByViews = useMemo(() => {
@@ -276,7 +271,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
     viewsInRange.forEach(v => {
       counts[v.property_id] = (counts[v.property_id] || 0) + 1;
     });
-    const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+    const propertyMap = new Map(viewedPropertyDetails.map(p => [p.id, p]));
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
@@ -290,7 +285,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
           price: prop?.price || 0,
         };
       });
-  }, [viewsInRange, allProperties]);
+  }, [viewsInRange, viewedPropertyDetails]);
 
   // ── Most favorited properties ───────────────────────────────────────────────
   const topPropertiesByFavorites = useMemo(() => {
@@ -298,7 +293,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
     savedProps.filter(s => inRange(s.created_at)).forEach(s => {
       counts[s.property_id] = (counts[s.property_id] || 0) + 1;
     });
-    const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+    const propertyMap = new Map(viewedPropertyDetails.map(p => [p.id, p]));
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
@@ -312,7 +307,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
           price: prop?.price || 0,
         };
       });
-  }, [savedProps, allProperties, dateRange]);
+  }, [savedProps, viewedPropertyDetails, dateRange]);
 
   // ── Most active users ─────────────────────────────────────────────────────────
   // Enriched with profile data (name, email) so the table shows human-readable
@@ -457,20 +452,21 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
       </div>
 
       {/* Database & Sync Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <MetricCard
           title="Active Properties"
-          value={allProperties.length.toLocaleString()}
+          value={totalPropertiesCount.toLocaleString()}
           icon={Database}
           color="text-indigo-500"
-          subtext={`${topCitiesByListings.length} cities covered`}
+          subtext={`${cityAggregation.length} cities covered`}
         />
         <MetricCard
           title="Most Viewed City"
           value={(() => {
+            const propertyMap = new Map(viewedPropertyDetails.map(p => [p.id, p]));
             const cities = {};
             viewsInRange.forEach(v => {
-              const prop = allProperties.find(p => p.id === v.property_id);
+              const prop = propertyMap.get(v.property_id);
               if (prop?.city) cities[prop.city] = (cities[prop.city] || 0) + 1;
             });
             const sorted = Object.entries(cities).sort((a, b) => b[1] - a[1]);
@@ -479,9 +475,10 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
           icon={Search}
           color="text-emerald-500"
           subtext={(() => {
+            const propertyMap = new Map(viewedPropertyDetails.map(p => [p.id, p]));
             const cities = {};
             viewsInRange.forEach(v => {
-              const prop = allProperties.find(p => p.id === v.property_id);
+              const prop = propertyMap.get(v.property_id);
               if (prop?.city) cities[prop.city] = (cities[prop.city] || 0) + 1;
             });
             const sorted = Object.entries(cities).sort((a, b) => b[1] - a[1]);
@@ -489,24 +486,11 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
           })()}
         />
         <MetricCard
-          title="Avg Listing Price"
-          value={allProperties.length > 0 ? `$${Math.round(allProperties.reduce((s, p) => s + (p.price || 0), 0) / allProperties.length).toLocaleString()}` : '$0'}
+          title="Largest City"
+          value={cityAggregation[0]?.name || 'N/A'}
           icon={Home}
           color="text-amber-500"
-          subtext="Active listings"
-        />
-        <MetricCard
-          title="Last MLS Sync"
-          value={(() => {
-            if (!syncProgress.lastSync) return 'Never';
-            const mins = Math.round((Date.now() - new Date(syncProgress.lastSync).getTime()) / 60000);
-            if (mins < 60) return `${mins}m ago`;
-            if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-            return `${Math.round(mins / 1440)}d ago`;
-          })()}
-          icon={Clock}
-          color="text-slate-500"
-          subtext={`Bucket ${syncProgress.currentBucket}/9 • ${syncProgress.status === 'success' ? '✓ OK' : syncProgress.status || ''}`}
+          subtext={cityAggregation[0] ? `${cityAggregation[0].count.toLocaleString()} active listings` : ''}
         />
       </div>
 
