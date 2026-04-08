@@ -43,16 +43,17 @@ export default function Home() {
         // ====================================================================
         // FEATURED LISTINGS — scoped to Tanner Crandell's owned inventory
         // --------------------------------------------------------------------
-        // Primary query: any active or coming_soon listing where Tanner is
-        // either the listing agent OR the co-listing agent. Matched by ARMLS
-        // agent ID (PC295) for exact, bulletproof matching — no name
-        // formatting fragility.
+        // Matched on Tanner's ARMLS agent ID in the list_agent_mls_id column.
+        // The value is stored lowercase in the Spark Replication data ("pc295"
+        // not "PC295") so we match on the lowercase form exactly with .eq().
+        // ilike is avoided here because the column isn't indexed for pattern
+        // matching and times out at ~60s on the full 26k-row table.
         //
-        // Fallback: if Tanner has zero active listings (solo agents aren't
-        // always on-market), broaden to any listing from the Crandell Real
-        // Estate Team office so the section never renders empty.
+        // If Tanner ever has zero active listings, the Featured Listings
+        // section hides entirely via the {featuredProperties.length > 0}
+        // conditional in the JSX below — no fallback needed.
         // ====================================================================
-        const TANNER_AGENT_ID = 'PC295';
+        const TANNER_AGENT_ID = 'pc295';
 
         const primaryResult = await supabase
           .from('properties')
@@ -60,28 +61,14 @@ export default function Home() {
           .in('status', ['active', 'coming_soon'])
           .not('latitude', 'is', null)
           .not('longitude', 'is', null)
-          .or(`list_agent_mls_id.eq.${TANNER_AGENT_ID},co_list_agent_mls_id.eq.${TANNER_AGENT_ID}`)
+          .eq('list_agent_mls_id', TANNER_AGENT_ID)
           .order('created_at', { ascending: false })
           .limit(8);
 
         let featured = primaryResult.data || [];
 
         if (primaryResult.error) {
-          console.error('Featured listings query error:', primaryResult.error);
-        }
-
-        // Fallback to team listings if Tanner has no active inventory
-        if (featured.length === 0) {
-          const fallbackResult = await supabase
-            .from('properties')
-            .select('*')
-            .in('status', ['active', 'coming_soon'])
-            .not('latitude', 'is', null)
-            .not('longitude', 'is', null)
-            .ilike('list_office_name', '%Crandell%')
-            .order('created_at', { ascending: false })
-            .limit(8);
-          featured = fallbackResult.data || [];
+          console.error('Featured listings query error:', JSON.stringify(primaryResult.error));
         }
 
         setFeaturedProperties(featured);
