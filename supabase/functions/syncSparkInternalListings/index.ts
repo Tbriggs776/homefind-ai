@@ -362,17 +362,23 @@ async function saveCursor(val: CursorState) {
 // Build the Spark URL for a given pass
 // ─────────────────────────────────────────────────────────────────────────────
 function buildUrl(pass: PassName, skiptoken: string): string {
+  // Residential-only filter — PropertyType 'A' = Residential in ARMLS Spark.
+  // This matches the public syncSparkApiListings filter and excludes land,
+  // commercial, multi-family, and other non-residential types that would
+  // pollute Market Pulse metrics (no beds/sqft, different pricing models).
+  const RESIDENTIAL = "PropertyType Eq 'A'";
+
   let filter = '';
   if (pass === 'active') {
-    filter = "MlsStatus Eq 'Active'";
+    filter = `MlsStatus Eq 'Active' And ${RESIDENTIAL}`;
   } else if (pass === 'pending') {
-    filter = "MlsStatus Eq 'Pending'";
+    filter = `MlsStatus Eq 'Pending' And ${RESIDENTIAL}`;
   } else {
     // closed: last 24 months
     const cutoff = new Date();
     cutoff.setMonth(cutoff.getMonth() - CLOSED_LOOKBACK_MONTHS);
     const cutoffDate = cutoff.toISOString().slice(0, 10);
-    filter = `MlsStatus Eq 'Closed' And CloseDate ge ${cutoffDate}`;
+    filter = `MlsStatus Eq 'Closed' And ${RESIDENTIAL} And CloseDate ge ${cutoffDate}`;
   }
 
   // No _select — we need all StandardFields for raw_data.
