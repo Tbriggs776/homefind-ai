@@ -16,9 +16,9 @@ import { supabase } from '@/api/supabaseClient';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
-const COLORS = ['#52ADEA', '#3a9dd8', '#1e7cc0', '#0c5fa8', '#06438a', '#8b5cf6', '#10b981', '#f59e0b'];
+const COLORS = ['#00AFE5', '#3a9dd8', '#1e7cc0', '#0c5fa8', '#06438a', '#8b5cf6', '#10b981', '#f59e0b'];
 
-function MetricCard({ title, value, change, icon: Icon, color = 'text-[#52ADEA]', subtext }) {
+function MetricCard({ title, value, change, icon: Icon, color = 'text-[#00AFE5]', subtext }) {
   const isPositive = change >= 0;
   return (
     <Card className="bg-white shadow border-slate-200">
@@ -101,6 +101,29 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
       return data || [];
     },
   });
+
+  // Fetch all user profiles so we can show names and emails instead of UUIDs
+  // in the Most Active Users table. Same pattern as ManageUsers.jsx — admin
+  // RLS policy allows reading all profile rows when logged in as admin.
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['analyticsAllProfiles'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role, is_user_admin, last_active_at, created_at')
+        .limit(1000);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Build a lookup map keyed by user id so the "Most Active Users" table can
+  // resolve a user_id to a display name in constant time.
+  const profileMap = useMemo(() => {
+    const m = new Map();
+    allProfiles.forEach(p => m.set(p.id, p));
+    return m;
+  }, [allProfiles]);
 
   // ── Date helpers ─────────────────────────────────────────────────────────────
   const now = new Date();
@@ -292,6 +315,8 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
   }, [savedProps, allProperties, dateRange]);
 
   // ── Most active users ─────────────────────────────────────────────────────────
+  // Enriched with profile data (name, email) so the table shows human-readable
+  // references instead of raw user UUIDs.
   const topUsers = useMemo(() => {
     const counts = {};
     viewsInRange.forEach(v => {
@@ -300,13 +325,20 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
-      .map(([userId, views]) => ({
-        userId,
-        views,
-        favorites: savedProps.filter(s => s.user_id === userId && inRange(s.created_at)).length,
-        chats: chatMessages.filter(m => m.user_id === userId && m.role === 'user' && inRange(m.created_at)).length,
-      }));
-  }, [viewsInRange, savedProps, chatMessages]);
+      .map(([userId, views]) => {
+        const profile = profileMap.get(userId);
+        const displayName = profile?.full_name?.trim() || profile?.email || 'Unknown user';
+        return {
+          userId,
+          displayName,
+          email: profile?.email || null,
+          fullName: profile?.full_name || null,
+          views,
+          favorites: savedProps.filter(s => s.user_id === userId && inRange(s.created_at)).length,
+          chats: chatMessages.filter(m => m.user_id === userId && m.role === 'user' && inRange(m.created_at)).length,
+        };
+      });
+  }, [viewsInRange, savedProps, chatMessages, profileMap]);
 
   // ── Price range interest ──────────────────────────────────────────────────────
   const priceRangeData = useMemo(() => {
@@ -382,7 +414,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
               onClick={() => setDateRange(d)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 dateRange === d
-                  ? 'bg-[#52ADEA] text-white'
+                  ? 'bg-[#00AFE5] text-white'
                   : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -399,7 +431,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
           value={viewsInRange.length.toLocaleString()}
           change={viewsChange}
           icon={Eye}
-          color="text-[#52ADEA]"
+          color="text-[#00AFE5]"
           subtext={`${avgViewsPerUser} avg per user`}
         />
         <MetricCard
@@ -456,7 +488,6 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
             return sorted[0] ? `${sorted[0][1]} views` : '';
           })()}
         />
-        />
         <MetricCard
           title="Avg Listing Price"
           value={allProperties.length > 0 ? `$${Math.round(allProperties.reduce((s, p) => s + (p.price || 0), 0) / allProperties.length).toLocaleString()}` : '$0'}
@@ -489,8 +520,8 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
             <AreaChart data={dailyData}>
               <defs>
                 <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#52ADEA" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#52ADEA" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#00AFE5" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#00AFE5" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorFavs" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
@@ -506,7 +537,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
               <Legend />
-              <Area type="monotone" dataKey="Property Views" stroke="#52ADEA" fill="url(#colorViews)" strokeWidth={2} />
+              <Area type="monotone" dataKey="Property Views" stroke="#00AFE5" fill="url(#colorViews)" strokeWidth={2} />
               <Area type="monotone" dataKey="Favorites" stroke="#ef4444" fill="url(#colorFavs)" strokeWidth={2} />
               <Area type="monotone" dataKey="AI Chats" stroke="#10b981" fill="url(#colorChats)" strokeWidth={2} />
             </AreaChart>
@@ -532,7 +563,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                   <XAxis type="number" tick={{ fontSize: 10 }} />
                   <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={80} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#52ADEA" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="count" fill="#00AFE5" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -551,7 +582,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                 <XAxis type="number" tick={{ fontSize: 10 }} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={80} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#52ADEA" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="count" fill="#00AFE5" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -589,7 +620,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
               <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={2} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
-              <Bar dataKey="views" fill="#52ADEA" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="views" fill="#00AFE5" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -613,10 +644,15 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
               <div className="space-y-2">
                 {topUsers.map((u, i) => (
                   <div key={u.userId} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-slate-400 w-5">#{i + 1}</span>
-                      <div>
-                        <p className="text-sm font-medium text-slate-800 truncate max-w-[160px]">{u.userId}</p>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className="text-xs font-bold text-slate-400 w-5 flex-shrink-0">#{i + 1}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-800 truncate">
+                          {u.displayName}
+                        </p>
+                        {u.fullName && u.email && (
+                          <p className="text-xs text-slate-500 truncate">{u.email}</p>
+                        )}
                         <div className="flex gap-3 text-xs text-slate-400 mt-0.5">
                           <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{u.views}</span>
                           <span className="flex items-center gap-1"><Heart className="h-3 w-3" />{u.favorites}</span>
@@ -624,7 +660,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                         </div>
                       </div>
                     </div>
-                    <Badge className="bg-[#52ADEA]/10 text-[#52ADEA] border-0 text-xs">{u.views} views</Badge>
+                    <Badge className="bg-[#00AFE5]/10 text-[#00AFE5] border-0 text-xs flex-shrink-0">{u.views} views</Badge>
                   </div>
                 ))}
               </div>
@@ -636,7 +672,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
         <Card className="bg-white shadow border-slate-200">
           <CardHeader>
             <CardTitle className="text-slate-800 text-base flex items-center gap-2">
-              <Home className="h-4 w-4 text-[#52ADEA]" />
+              <Home className="h-4 w-4 text-[#00AFE5]" />
               Top Viewed Properties
             </CardTitle>
           </CardHeader>
@@ -654,7 +690,7 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="text-xs font-bold text-slate-400 w-5 flex-shrink-0">#{i + 1}</span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate group-hover:text-[#52ADEA] transition-colors">
+                        <p className="text-sm font-medium text-slate-800 truncate group-hover:text-[#00AFE5] transition-colors">
                           {p.address}{p.city ? `, ${p.city}` : ''}
                         </p>
                         {p.price > 0 && (
@@ -667,12 +703,12 @@ export default function AnalyticsDashboard({ allUsers, allViews, alerts, savedPr
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <div className="h-2 bg-slate-100 rounded-full w-16 overflow-hidden">
                         <div
-                          className="h-2 bg-[#52ADEA] rounded-full"
+                          className="h-2 bg-[#00AFE5] rounded-full"
                           style={{ width: `${(p.views / topPropertiesByViews[0].views) * 100}%` }}
                         />
                       </div>
                       <span className="text-sm font-semibold text-slate-700 w-8 text-right">{p.views}</span>
-                      <ExternalLink className="h-3 w-3 text-slate-300 group-hover:text-[#52ADEA]" />
+                      <ExternalLink className="h-3 w-3 text-slate-300 group-hover:text-[#00AFE5]" />
                     </div>
                   </Link>
                 ))}
