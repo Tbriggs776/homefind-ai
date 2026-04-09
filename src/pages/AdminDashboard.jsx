@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, invokeFunction } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Users, TrendingDown, Eye, Heart, Loader2,
   AlertCircle, CheckCircle, Clock, Sparkles, Link as LinkIcon, RefreshCw
@@ -30,7 +38,9 @@ import { InfoTooltip } from '../components/ui/tooltip-wrapper';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
-  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const queryClient = useQueryClient();
+  const [generatingSummaryFor, setGeneratingSummaryFor] = useState(null); // holds the userId currently being generated, or null
+  const [viewingSummaryUser, setViewingSummaryUser] = useState(null); // holds the user object whose summary is being viewed in the dialog, or null
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [testResults, setTestResults] = useState(null);
@@ -85,14 +95,21 @@ export default function AdminDashboard() {
   });
 
   const generateAISummary = async (userId) => {
-    setGeneratingSummary(true);
+    setGeneratingSummaryFor(userId);
     try {
-      const summary = await invokeFunction('generateAISummary', { user_id: userId });
-      return summary.summary || 'Unable to generate summary at this time.';
+      const result = await invokeFunction('generateAISummary', { user_id: userId });
+      if (result?.error) {
+        console.error('generateAISummary error:', result.error);
+        return null;
+      }
+      // Refresh the users list so the new ai_summary shows up inline
+      await queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      return result.summary || null;
     } catch (error) {
-      return 'Unable to generate summary at this time.';
+      console.error('generateAISummary threw:', error);
+      return null;
     } finally {
-      setGeneratingSummary(false);
+      setGeneratingSummaryFor(null);
     }
   };
 
@@ -442,22 +459,48 @@ export default function AdminDashboard() {
                             {lastView ? format(new Date(lastView.created_at), 'MMM d, yyyy') : 'Never'}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={async () => {
-                                const summary = await generateAISummary(u.id);
-                                alert(`AI Summary for ${u.email}:\n\n${summary}`);
-                              }}
-                              disabled={generatingSummary || userViews.length === 0}
-                              className="flex items-center gap-1"
-                            >
-                              <Sparkles className="h-3 w-3 mr-1" />
-                              {generatingSummary ? 'Generating...' : 'Generate'}
-                              {userViews.length > 0 && (
-                                <InfoTooltip content="AI analyzes user behavior and preferences to provide actionable insights" />
-                              )}
-                            </Button>
+                            {u.ai_summary ? (
+                              <div className="flex items-start gap-2 max-w-sm">
+                                <Sparkles className="h-4 w-4 text-primary flex-shrink-0 mt-1" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-slate-700 line-clamp-2">
+                                    {u.ai_summary}
+                                  </p>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingSummaryUser(u)}
+                                      className="text-xs font-medium text-primary hover:underline"
+                                    >
+                                      View full
+                                    </button>
+                                    {u.ai_summary_generated_at && (
+                                      <span className="text-xs text-slate-400">
+                                        {format(new Date(u.ai_summary_generated_at), 'MMM d, yyyy')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => generateAISummary(u.id)}
+                                disabled={generatingSummaryFor === u.id || userViews.length === 0}
+                                className="flex items-center gap-1"
+                              >
+                                {generatingSummaryFor === u.id ? (
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                ) : (
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                )}
+                                {generatingSummaryFor === u.id ? 'Generating...' : 'Generate'}
+                                {userViews.length > 0 && generatingSummaryFor !== u.id && (
+                                  <InfoTooltip content="AI analyzes user behavior and preferences to provide actionable insights" />
+                                )}
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -636,6 +679,54 @@ export default function AdminDashboard() {
           )}
         </Tabs>
       </div>
+
+      {/* View Full AI Summary dialog */}
+      <Dialog open={!!viewingSummaryUser} onOpenChange={(open) => !open && setViewingSummaryUser(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              AI Summary — {viewingSummaryUser?.full_name || viewingSummaryUser?.email}
+            </DialogTitle>
+            {viewingSummaryUser?.ai_summary_generated_at && (
+              <DialogDescription>
+                Generated {format(new Date(viewingSummaryUser.ai_summary_generated_at), "MMM d, yyyy 'at' h:mm a")}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+              {viewingSummaryUser?.ai_summary}
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (!viewingSummaryUser) return;
+                const userId = viewingSummaryUser.id;
+                await generateAISummary(userId);
+                // After regeneration, fetch the updated row from the freshly-invalidated cache
+                // and update the dialog to show the new text without closing it.
+                const fresh = queryClient
+                  .getQueryData(['allUsers'])
+                  ?.find((u) => u.id === userId);
+                if (fresh) setViewingSummaryUser(fresh);
+              }}
+              disabled={generatingSummaryFor === viewingSummaryUser?.id}
+              className="flex items-center gap-2"
+            >
+              {generatingSummaryFor === viewingSummaryUser?.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {generatingSummaryFor === viewingSummaryUser?.id ? 'Regenerating...' : 'Regenerate'}
+            </Button>
+            <Button onClick={() => setViewingSummaryUser(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
