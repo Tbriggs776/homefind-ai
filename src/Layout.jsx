@@ -17,7 +17,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from './utils';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Home, Heart, LayoutDashboard, LogOut, User, Menu, X, Search } from 'lucide-react';
+import { Home, Heart, LayoutDashboard, LogOut, User, Menu, X, Search, TrendingUp } from 'lucide-react';
 
 import MortgageRateTicker from '@/components/MortgageRateTicker';
 
@@ -45,6 +45,7 @@ export default function Layout({ children, currentPageName }) {
 
   const adminLinks = [
     { name: 'Admin Dashboard', path: 'AdminDashboard', icon: LayoutDashboard },
+    { name: 'Market Pulse', path: 'MarketPulse', icon: TrendingUp },
     { name: 'Manage Users', path: 'ManageUsers', icon: User },
   ];
 
@@ -62,7 +63,7 @@ export default function Layout({ children, currentPageName }) {
               <img
                 src="/balboa-realty-logo.png"
                 alt="Crandell Real Estate Team - Balboa Realty"
-                className="h-14 md:h-16 w-auto object-contain group-hover:opacity-90 transition-opacity"
+                className="h-12 md:h-14 w-auto object-contain group-hover:opacity-90 transition-opacity"
               />
             </Link>
 
