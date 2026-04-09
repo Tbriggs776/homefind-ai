@@ -62,7 +62,7 @@ export default function Layout({ children, currentPageName }) {
               <img
                 src="/balboa-realty-logo.png"
                 alt="Crandell Real Estate Team - Balboa Realty"
-                className="h-12 md:h-14 w-auto object-contain group-hover:opacity-90 transition-opacity"
+                className="h-14 md:h-16 w-auto object-contain group-hover:opacity-90 transition-opacity"
               />
             </Link>
 
