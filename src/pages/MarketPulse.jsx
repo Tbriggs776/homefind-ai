@@ -55,58 +55,51 @@ export default function MarketPulse() {
 
   const isAdmin = user?.role === 'admin' || user?.is_user_admin === true;
 
-  // ── Query 1: Hero stats (single-row aggregate) ────────────────────────────
-  // Uses a single scan over properties_internal to compute 4 headline numbers.
-  // Returns one row: { active_total, closed_30d, closed_30d_median, median_dom,
-  //                    months_of_inventory, closed_90d }
+  // ── Query 1: Hero stats (single RPC call) ─────────────────────────────────
+  // Uses the mp_hero_stats Postgres function defined in
+  // supabase/migrations/mp_hero_stats.sql. The function computes all four
+  // hero-card metrics in-database from a LAGGED 300→60 day window to work
+  // around ARMLS reporting lag (trailing 30/60d windows are biased toward
+  // slow-reporting deals and give implausible numbers).
+  //
+  // If the migration hasn't been applied, we fall back to a minimal query
+  // that at least gives the active total so the page still renders.
   const heroQuery = useQuery({
     queryKey: ['mp-hero-stats'],
     enabled: isAdmin,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      // We can't do COUNT + percentile_cont + conditional aggregates cleanly
-      // through the PostgREST auto-generated endpoints, so we call a database
-      // RPC. If that RPC doesn't exist (fresh install), we fall back to three
-      // smaller queries and stitch together client-side.
       const { data: rpcData, error: rpcErr } = await supabase.rpc('mp_hero_stats');
       if (!rpcErr && rpcData) {
-        // RPC returns an array with one object row
-        return Array.isArray(rpcData) ? rpcData[0] : rpcData;
+        const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+        return {
+          active_total: Number(row.active_total) || 0,
+          closed_lagged: Number(row.closed_lagged) || 0,
+          median_close_price: row.median_close_price != null ? Number(row.median_close_price) : null,
+          median_dom: row.median_dom != null ? Number(row.median_dom) : null,
+          months_of_inventory: row.months_of_inventory != null ? Number(row.months_of_inventory) : null,
+          window_start: row.window_start,
+          window_end: row.window_end,
+          rpc_available: true,
+        };
       }
 
-      // Fallback: three parallel smaller queries
-      const [activeCount, closed30d, closed90d] = await Promise.all([
-        supabase
-          .from('properties_internal')
-          .select('id', { count: 'exact', head: true })
-          .eq('mls_status', 'Active'),
-        supabase
-          .from('properties_internal')
-          .select('close_price, days_listing_to_close')
-          .eq('mls_status', 'Closed')
-          .gte('close_date', new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10)),
-        supabase
-          .from('properties_internal')
-          .select('id', { count: 'exact', head: true })
-          .eq('mls_status', 'Closed')
-          .gte('close_date', new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10)),
-      ]);
-
-      const prices = (closed30d.data || []).map((r) => r.close_price).filter(Boolean).sort((a, b) => a - b);
-      const doms = (closed30d.data || []).map((r) => r.days_listing_to_close).filter((v) => v != null).sort((a, b) => a - b);
-      const median = (arr) => (arr.length ? arr[Math.floor(arr.length / 2)] : null);
-
-      // Months of inventory = active / (closed in last 90d / 3 months)
-      const monthlyPace = (closed90d.count || 0) / 3;
-      const moi = monthlyPace > 0 ? (activeCount.count || 0) / monthlyPace : null;
+      // Fallback: active count only (no RPC). The page will render with the
+      // Active Listings card populated and the other three showing "—".
+      const { count: activeCount } = await supabase
+        .from('properties_internal')
+        .select('id', { count: 'exact', head: true })
+        .eq('mls_status', 'Active');
 
       return {
-        active_total: activeCount.count || 0,
-        closed_30d: closed30d.data?.length || 0,
-        closed_30d_median: median(prices),
-        median_dom: median(doms),
-        months_of_inventory: moi,
-        closed_90d: closed90d.count || 0,
+        active_total: activeCount || 0,
+        closed_lagged: null,
+        median_close_price: null,
+        median_dom: null,
+        months_of_inventory: null,
+        window_start: null,
+        window_end: null,
+        rpc_available: false,
       };
     },
   });

@@ -5,9 +5,17 @@ import { Home, DollarSign, Clock, Package } from 'lucide-react';
 /**
  * HeroStatsStrip — the 4-card KPI row at the top of Market Pulse
  *
- * Visual style matches AnalyticsDashboard's MetricCard pattern exactly so
- * the two pages feel like siblings. Each card has: small label, big number,
- * optional subtext, icon in a soft pill on the right.
+ * Metrics (derived from properties_internal):
+ *   - Active Listings        — current count, mls_status = 'Active'
+ *   - Median Sale Price      — from the lagged 300→60 day closed window
+ *   - Median DOM             — days_listing_to_contract, same lagged window
+ *   - Months of Inventory    — active_count / monthly_closing_pace (lagged)
+ *
+ * All three "recent activity" metrics use a LAGGED window rather than trailing
+ * 30/90 days, because ARMLS reporting lag heavily biases trailing windows
+ * toward slow-reporting deals. See the mp_hero_stats SQL migration for detail.
+ *
+ * Visual style matches AnalyticsDashboard's MetricCard pattern for cohesion.
  */
 
 function formatCurrency(n) {
@@ -26,7 +34,8 @@ function formatMoI(moi) {
   let subtext;
   if (moi < 3) subtext = "Seller's market — tight supply";
   else if (moi < 6) subtext = 'Balanced market';
-  else subtext = "Buyer's market — excess supply";
+  else if (moi < 9) subtext = "Buyer's market — elevated supply";
+  else subtext = "Deep buyer's market — excess supply";
   return { value: `${rounded.toFixed(1)} mo`, subtext };
 }
 
@@ -54,31 +63,46 @@ export default function HeroStatsStrip({ data }) {
   const moi = formatMoI(d.months_of_inventory);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <StatCard
-        label="Active Listings"
-        value={formatNumber(d.active_total)}
-        subtext="Residential, metro-wide"
-        icon={Home}
-      />
-      <StatCard
-        label="Closed · Last 30 Days"
-        value={formatNumber(d.closed_30d)}
-        subtext={`Median ${formatCurrency(d.closed_30d_median)}`}
-        icon={DollarSign}
-      />
-      <StatCard
-        label="Median DOM"
-        value={d.median_dom != null ? `${d.median_dom} days` : '—'}
-        subtext="Listing → contract, last 30d sales"
-        icon={Clock}
-      />
-      <StatCard
-        label="Months of Inventory"
-        value={moi.value}
-        subtext={moi.subtext}
-        icon={Package}
-      />
+    <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Active Listings"
+          value={formatNumber(d.active_total)}
+          subtext="Residential, metro-wide"
+          icon={Home}
+        />
+        <StatCard
+          label="Median Sale Price"
+          value={formatCurrency(d.median_close_price)}
+          subtext={d.closed_lagged ? `Based on ${formatNumber(d.closed_lagged)} closed sales` : '—'}
+          icon={DollarSign}
+        />
+        <StatCard
+          label="Median DOM"
+          value={d.median_dom != null ? `${d.median_dom} days` : '—'}
+          subtext="Listing → contract"
+          icon={Clock}
+        />
+        <StatCard
+          label="Months of Inventory"
+          value={moi.value}
+          subtext={moi.subtext}
+          icon={Package}
+        />
+      </div>
+
+      {/* Reporting-lag footnote */}
+      {d.rpc_available === false && (
+        <p className="text-xs text-amber-600 mt-3">
+          ⚠ Advanced metrics unavailable — run the <code className="text-xs">mp_hero_stats</code> SQL migration to enable median price, DOM, and months of inventory.
+        </p>
+      )}
+      {d.rpc_available && (
+        <p className="text-xs text-slate-400 mt-3">
+          Sale-based metrics use a lagged reporting window to account for MLS data delays.
+        </p>
+      )}
     </div>
   );
 }
+
