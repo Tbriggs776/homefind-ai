@@ -287,7 +287,7 @@ export default function Home() {
               <img
                 src="/team/team_crandell.jpg"
                 alt="The Crandell Real Estate Team"
-                className="w-48 h-48 md:w-56 md:h-56 rounded-full object-cover border-4 border-white shadow-lg"
+                className="w-48 h-48 md:w-56 md:h-56 rounded-xl object-cover border-4 border-white shadow-lg"
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
 
