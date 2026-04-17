@@ -4,6 +4,7 @@ import IdxBrokerSetup from './pages/IdxBrokerSetup';
 import Login from './pages/Login';
 import ManageUsers from './pages/ManageUsers';
 import MarketPulse from './pages/MarketPulse';
+import Onboarding from './pages/Onboarding';
 import Profile from './pages/Profile';
 import PropertyCompare from './pages/PropertyCompare';
 import PropertyDetail from './pages/PropertyDetail';
@@ -19,6 +20,7 @@ export const PAGES = {
     "Login": Login,
     "ManageUsers": ManageUsers,
     "MarketPulse": MarketPulse,
+    "Onboarding": Onboarding,
     "Profile": Profile,
     "PropertyCompare": PropertyCompare,
     "PropertyDetail": PropertyDetail,

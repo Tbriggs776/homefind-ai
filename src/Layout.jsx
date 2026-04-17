@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // GA4 initialization
 if (typeof window !== 'undefined' && !window.gtagLoaded) {
@@ -31,6 +31,21 @@ export default function Layout({ children, currentPageName }) {
     await logout();
     navigate('/');
   };
+
+  // Redirect new users to onboarding if they haven't completed it yet.
+  // Skip the redirect if they're already on the Onboarding or Login page.
+  useEffect(() => {
+    if (
+      user &&
+      !user.has_completed_onboarding &&
+      user.role !== 'admin' &&
+      user.is_user_admin !== true &&
+      currentPageName !== 'Onboarding' &&
+      currentPageName !== 'Login'
+    ) {
+      navigate('/Onboarding');
+    }
+  }, [user, currentPageName, navigate]);
 
   // Search is available to everyone (anonymous browsing is critical for an
   // IDX site — Zillow/Redfin let buyers search before any sign-in). Saved
