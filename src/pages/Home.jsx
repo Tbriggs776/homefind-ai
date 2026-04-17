@@ -371,7 +371,7 @@ export default function Home() {
                 We don't just work in Queen Creek. We live here.
               </p>
               <p className="text-muted-foreground leading-relaxed mb-3">
-                Every showing, every offer, every decision is backed by real, local insight — not guesswork.
+                Every showing, every offer, every decision is backed by real, local insight, not guesswork.
               </p>
               <p className="text-muted-foreground leading-relaxed">
                 When you work with us, you're not getting a random agent. You're getting a strategy built around how this market actually moves.
