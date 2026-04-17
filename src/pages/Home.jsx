@@ -192,10 +192,41 @@ export default function Home() {
           aria-hidden="true"
         />
 
+        {/* Hero image — absolutely positioned to fill right half on desktop */}
+        {heroImages.length > 0 && (
+          <div className="absolute top-0 right-0 bottom-0 w-1/2 hidden lg:block">
+            {heroImages.map((img, idx) => (
+              <img
+                key={idx}
+                src={img}
+                alt="Featured Arizona home"
+                className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
+                style={{ opacity: idx === heroIndex ? 1 : 0 }}
+              />
+            ))}
+            {/* Gradient fade from dark left into image */}
+            <div className="absolute inset-0 bg-gradient-to-r from-secondary via-secondary/50 to-transparent w-1/3" />
+            {/* Dot indicators */}
+            {heroImages.length > 1 && (
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                {heroImages.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setHeroIndex(idx)}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      idx === heroIndex ? 'bg-white w-4' : 'bg-white/50'
+                    }`}
+                    aria-label={`Show property ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="crandell-container relative">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-            {/* Left column — text + search */}
-            <div className="py-16 md:py-24 lg:py-28">
+          <div className="max-w-xl py-16 md:py-24 lg:py-28">
               <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-3">
                 Crandell Home Intelligence
               </p>
@@ -249,45 +280,6 @@ export default function Home() {
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Right column — rotating hero property images */}
-            <div className="hidden lg:block relative">
-              {heroImages.length > 0 ? (
-                <div className="relative rounded-2xl overflow-hidden shadow-2xl ml-auto" style={{ maxWidth: 520, height: 420 }}>
-                  {heroImages.map((img, idx) => (
-                    <img
-                      key={idx}
-                      src={img}
-                      alt="Featured Arizona home"
-                      className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
-                      style={{ opacity: idx === heroIndex ? 1 : 0 }}
-                    />
-                  ))}
-                  {/* Subtle gradient overlay on left edge for text readability */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-secondary/30 via-transparent to-transparent" />
-                  {/* Dot indicators */}
-                  {heroImages.length > 1 && (
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-                      {heroImages.map((_, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setHeroIndex(idx)}
-                          className={`w-2 h-2 rounded-full transition-all ${
-                            idx === heroIndex ? 'bg-white w-4' : 'bg-white/50'
-                          }`}
-                          aria-label={`Show property ${idx + 1}`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-2xl bg-white/5 h-[420px] ml-auto" style={{ maxWidth: 520 }} />
-              )}
-              )}
-            </div>
           </div>
         </div>
       </section>
@@ -392,7 +384,6 @@ export default function Home() {
                 src="/team/team_crandell.jpg"
                 alt="The Crandell Real Estate Team"
                 className="w-full rounded-xl object-cover shadow-lg"
-                style={{ maxHeight: 360 }}
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             </div>
