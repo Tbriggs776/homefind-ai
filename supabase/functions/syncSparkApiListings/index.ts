@@ -129,7 +129,7 @@ function buildRow(listing: any) {
   const lotF = sft(d.LotFeatures).toLowerCase();
   const comF = sft(d.CommunityFeatures).toLowerCase();
   const poolF = sft(d.PoolFeatures).toLowerCase();
-  const stories = parseFloat(d.Stories || d.Levels || '0');
+  const stories = parseFloat(d.StoriesTotal || d.Stories || d.Levels || '0');
   const assocYN = String(d.AssociationYN || '').toLowerCase();
   const hasHOA = assocYN === 'true' || assocYN === 'yes' || d.AssociationYN === true || (parseFloat(d.AssociationFee) > 0);
   const agentId = (d.ListAgentMlsId || '').toLowerCase();
@@ -227,7 +227,7 @@ const SELECT = [
   'ModificationTimestamp','ListingContractDate','OnMarketDate','OriginalEntryTimestamp',
   'PoolFeatures','GarageSpaces','WaterfrontYN','FireplacesTotal',
   'Basement','PatioAndPorchFeatures','Cooling','Flooring','ParkingFeatures','LotFeatures',
-  'Stories','Levels','AssociationYN','AssociationFee','AssociationFeeFrequency',
+  'Stories','StoriesTotal','Levels','AssociationYN','AssociationFee','AssociationFeeFrequency',
   'CommunityFeatures','SeniorCommunityYN','GreenEnergyEfficient','GreenEnergyGeneration',
   'OtherStructures','ArchitecturalStyle','InteriorFeatures','ExteriorFeatures',
   'PropertyCondition','SpaFeatures','SpaYN','View','ViewYN','TaxAnnualAmount',
