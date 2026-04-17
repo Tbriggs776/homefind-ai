@@ -9,6 +9,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import Login from '@/pages/Login';
 import debug from '@/lib/debug';
+import { Analytics } from '@vercel/analytics/react';
 
 // Initialize debug system
 debug.log('App', 'HomeFind AI starting');
@@ -136,6 +137,7 @@ function App() {
             </AuthLoadingGate>
           </Router>
           <Toaster />
+          <Analytics />
         </QueryClientProvider>
       </AuthProvider>
     </ErrorBoundary>
