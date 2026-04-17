@@ -2,29 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { supabase, invokeFunction } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Loader2, Search, MapPin, ArrowRight } from 'lucide-react';
+import { Loader2, Search, ArrowRight, Home as HomeIcon, DollarSign } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import PropertyCard from '../components/properties/PropertyCard';
 import RecentlyViewed from '../components/home/RecentlyViewed';
 
 // Quick-filter chips for the East Valley cities Crandell specializes in.
-// Click to deep-link into the search page with the city pre-filtered.
 const QUICK_CITIES = [
   'Queen Creek',
   'San Tan Valley',
   'Gilbert',
   'Mesa',
   'Chandler',
-];
-
-// Team members for the "Meet the Team" strip below the hero.
-// Replace photo paths with real headshots once available — drop the files
-// into public/team/ and they'll resolve automatically.
-const TEAM_MEMBERS = [
-  { name: 'Tanner Crandell', role: 'Team Lead', photo: '/team/tanner.jpg' },
-  { name: 'Denver Lane', role: 'Broker', photo: '/team/denver.jpg' },
-  { name: 'Crandell Team', role: 'Agents', photo: '/team/team-3.jpg' },
 ];
 
 export default function Home() {
@@ -40,19 +30,6 @@ export default function Home() {
     const initPage = async () => {
       setLoading(true);
       try {
-        // ====================================================================
-        // FEATURED LISTINGS — scoped to Tanner Crandell's owned inventory
-        // --------------------------------------------------------------------
-        // Matched on Tanner's ARMLS agent ID in the list_agent_mls_id column.
-        // The value is stored lowercase in the Spark Replication data ("pc295"
-        // not "PC295") so we match on the lowercase form exactly with .eq().
-        // ilike is avoided here because the column isn't indexed for pattern
-        // matching and times out at ~60s on the full 26k-row table.
-        //
-        // If Tanner ever has zero active listings, the Featured Listings
-        // section hides entirely via the {featuredProperties.length > 0}
-        // conditional in the JSX below — no fallback needed.
-        // ====================================================================
         const TANNER_AGENT_ID = 'pc295';
 
         const primaryResult = await supabase
@@ -73,8 +50,6 @@ export default function Home() {
 
         setFeaturedProperties(featured);
 
-        // Total active listings count — used by the hero text
-        // ("Search every active listing, backed by X homes from ARMLS")
         const countResult = await supabase
           .from('properties')
           .select('*', { count: 'exact', head: true })
@@ -90,7 +65,6 @@ export default function Home() {
         setLoading(false);
       }
 
-      // Authenticated-user side effects (preserved from original file)
       if (user) {
         try { await invokeFunction('markUserActive', { userId: user.id }); } catch {}
         try { await invokeFunction('sendWelcomeEmail', { userId: user.id }); } catch {}
@@ -171,7 +145,9 @@ export default function Home() {
         </div>
       )}
 
-      {/* HERO — search bar IS the call to action */}
+      {/* ================================================================
+          HERO SECTION
+          ================================================================ */}
       <section className="relative bg-secondary text-white overflow-hidden">
         <div
           className="absolute inset-0 bg-gradient-to-br from-secondary via-secondary to-[#1a2332]"
@@ -185,13 +161,11 @@ export default function Home() {
             </p>
 
             <h1 className="text-white font-normal leading-tight mb-4" style={{ fontSize: 'var(--crandell-text-display)' }}>
-              Finding your<br />perfect home.
+              Find the right home.<br />Not just the next one.
             </h1>
 
             <p className="text-white/80 text-lg md:text-xl mb-8 max-w-xl">
-              Search every active listing in Arizona,
-              {totalListings ? <> backed by <span className="font-semibold text-white">{totalListings.toLocaleString?.() || totalListings}</span> homes from ARMLS</> : ' backed by the full ARMLS feed'},
-              and shown to you by the Crandell Real Estate Team.
+              Every active home in Arizona. Smarter search. Better decisions. Backed by the Crandell Real Estate Team.
             </p>
 
             <form
@@ -201,7 +175,7 @@ export default function Home() {
               <Search className="w-5 h-5 text-muted-foreground ml-3 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="City, neighborhood, ZIP, or address"
+                placeholder="City, neighborhood, address… or just start exploring"
                 value={heroSearchValue}
                 onChange={(e) => setHeroSearchValue(e.target.value)}
                 className="flex-1 px-2 py-3 text-base text-foreground bg-transparent border-0 focus:outline-none focus:ring-0 min-w-0"
@@ -214,8 +188,14 @@ export default function Home() {
               </Button>
             </form>
 
+            {/* Trust line */}
+            <p className="text-white/50 text-sm mt-3 max-w-xl">
+              Used by buyers across Queen Creek and the East Valley to find homes before they're gone.
+            </p>
+
+            {/* Quick city chips */}
             <div className="flex flex-wrap gap-2 mt-5">
-              <span className="text-white/60 text-sm self-center mr-1">Browse by city:</span>
+              <span className="text-white/60 text-sm self-center mr-1">Start with the areas we know best:</span>
               {QUICK_CITIES.map((city) => (
                 <button
                   key={city}
@@ -230,7 +210,57 @@ export default function Home() {
         </div>
       </section>
 
-      {/* MEET THE TEAM STRIP */}
+      {/* ================================================================
+          NOT SURE WHERE TO START? — two-option CTA section
+          ================================================================ */}
+      <section className="bg-white py-12 md:py-16 border-b border-border">
+        <div className="crandell-container">
+          <h2 className="text-center text-foreground font-normal mb-8 text-2xl md:text-3xl">
+            Not sure where to start?
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            {/* Search Homes option */}
+            <Link
+              to={createPageUrl('Search')}
+              className="group border border-border rounded-xl p-6 md:p-8 hover:border-primary hover:shadow-md transition-all text-center"
+            >
+              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                <HomeIcon className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Search Homes</h3>
+              <p className="text-muted-foreground text-sm">
+                Explore everything available right now
+              </p>
+              <span className="inline-flex items-center gap-1 text-primary text-sm font-medium mt-4 group-hover:gap-2 transition-all">
+                Start searching <ArrowRight className="h-4 w-4" />
+              </span>
+            </Link>
+
+            {/* Sell Before You Buy option */}
+            <a
+              href="https://crandellrealestate.com/sell/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group border border-border rounded-xl p-6 md:p-8 hover:border-primary hover:shadow-md transition-all text-center"
+            >
+              <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                <DollarSign className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Sell Before You Buy</h3>
+              <p className="text-muted-foreground text-sm">
+                Get a strategy for timing, pricing, and maximizing your equity
+              </p>
+              <span className="inline-flex items-center gap-1 text-primary text-sm font-medium mt-4 group-hover:gap-2 transition-all">
+                Learn more <ArrowRight className="h-4 w-4" />
+              </span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================================
+          LOCAL. ALWAYS. — team section with photo + dual CTAs
+          ================================================================ */}
       <section className="bg-muted py-12 md:py-16">
         <div className="crandell-container">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
@@ -238,63 +268,77 @@ export default function Home() {
               <p className="text-muted-foreground text-xs uppercase tracking-wider mb-2 font-semibold">
                 Local. Always.
               </p>
-              <h2 className="text-foreground font-normal mb-3">
+              <h2 className="text-foreground font-normal mb-4">
                 The Crandell Real Estate Team
               </h2>
+              <p className="text-muted-foreground leading-relaxed mb-3">
+                We don't just work in Queen Creek. We live here.
+              </p>
+              <p className="text-muted-foreground leading-relaxed mb-3">
+                Every showing, every offer, every decision is backed by real, local insight — not guesswork.
+              </p>
               <p className="text-muted-foreground leading-relaxed">
-                We live in Queen Creek. We list in Queen Creek. We close in Queen Creek.
-                When you find a home on this site, you'll be touring it with us — not
-                a stranger from a referral pool.
+                When you work with us, you're not getting a random agent. You're getting a strategy built around how this market actually moves.
               </p>
             </div>
 
-            <div className="flex items-center gap-6">
-              <div className="flex -space-x-3">
-                {TEAM_MEMBERS.map((member) => (
-                  <img
-                    key={member.name}
-                    src={member.photo}
-                    alt={member.name}
-                    className="w-14 h-14 md:w-16 md:h-16 rounded-full border-2 border-white object-cover bg-muted shadow-md"
-                    onError={(e) => { e.target.style.display = 'none'; }}
-                  />
-                ))}
-              </div>
+            <div className="flex flex-col items-center gap-4">
+              {/* Team photo */}
+              <img
+                src="/team/team_crandell.jpg"
+                alt="The Crandell Real Estate Team"
+                className="w-48 h-48 md:w-56 md:h-56 rounded-full object-cover border-4 border-white shadow-lg"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
 
-              {/* Meet the team button — links to the main Crandell site */}
-              <a
-                href="https://crandellrealestate.com/our-team/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button
-                  variant="outline"
-                  className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground whitespace-nowrap"
+              {/* Dual CTA buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <a
+                  href="https://crandellrealestate.com/our-team/"
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
-                  Meet the team
-                </Button>
-              </a>
+                  <Button
+                    variant="outline"
+                    className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground whitespace-nowrap"
+                  >
+                    Meet the Team
+                  </Button>
+                </a>
+                <a
+                  href="https://crandellrealestate.com/sell/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button
+                    variant="outline"
+                    className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground whitespace-nowrap"
+                  >
+                    Sell First
+                  </Button>
+                </a>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* FEATURED LISTINGS */}
+      {/* ================================================================
+          FEATURED LISTINGS — Crandell team's active inventory
+          ================================================================ */}
       <section className="py-16 md:py-20">
         <div className="crandell-container">
           {featuredProperties.length > 0 ? (
             <div className="mb-16">
               <div className="text-center mb-12 max-w-2xl mx-auto">
                 <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-2">
-                  Our current listings
+                  Our Current Listings
                 </p>
                 <h2 className="text-foreground font-normal mb-4">
-                  Homes we're listing now
+                  Homes we're actively representing
                 </h2>
                 <p className="text-muted-foreground">
-                  The homes Tanner and the Crandell Real Estate Team are currently
-                  representing across Arizona. For the full MLS with {totalListings || 'thousands of'} active
-                  listings, use our search.
+                  These are homes we know inside and out. If one stands out, we can give you real insight beyond what you see online.
                 </p>
               </div>
 
@@ -332,7 +376,7 @@ export default function Home() {
           <div className="text-center mt-12">
             <Link to={createPageUrl('Search')}>
               <Button className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold px-10 py-6 text-lg">
-                Browse all {totalListings ? totalListings.toLocaleString?.() || totalListings : ''} homes
+                Search All Arizona Homes
               </Button>
             </Link>
           </div>
