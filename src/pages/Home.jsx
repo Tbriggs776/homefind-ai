@@ -378,15 +378,20 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Right column — wide team photo */}
-            <div>
+            {/* Right column — wide team photo (clickable) */}
+            <a
+              href="https://crandellrealestate.com/our-team/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block hover:opacity-90 transition-opacity"
+            >
               <img
                 src="/team/team_crandell.jpg"
                 alt="The Crandell Real Estate Team"
-                className="w-full rounded-xl object-cover shadow-lg"
+                className="w-full rounded-xl object-cover shadow-lg cursor-pointer"
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
-            </div>
+            </a>
           </div>
         </div>
       </section>
