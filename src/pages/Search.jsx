@@ -58,18 +58,27 @@ function getInitialFilters(savedFilters) {
   const cityParam = urlParams.get('city');
   const qParam = urlParams.get('q');
   const subdivisionParam = urlParams.get('subdivision');
+  const labelParam = urlParams.get('label'); // optional display label for multi-city, e.g. "East Valley"
 
   if (cityParam || qParam || subdivisionParam) {
+    // Support comma-separated multi-city URLs:
+    //   ?city=Queen+Creek           → single city (backward compatible)
+    //   ?city=Mesa,Tempe,Chandler   → multi-city array
+    //   ?city=Mesa,Tempe&label=East+Valley → multi-city with custom display label
+    const cityList = cityParam
+      ? cityParam.split(',').map(c => c.trim()).filter(Boolean)
+      : [];
+    const isMultiCity = cityList.length > 1;
+
     return {
       ...(savedFilters || {}),
-      // City chips from the homepage use ?city= → precise city filter
-      ...(cityParam ? { city: cityParam } : {}),
-      // Subdivision detail-page links use ?subdivision= → precise subdivision filter
+      ...(isMultiCity
+        ? { cities: cityList, cities_label: labelParam || cityList.join(', '), city: '' }
+        : cityList.length === 1
+          ? { city: cityList[0], cities: null, cities_label: '' }
+          : {}),
       ...(subdivisionParam ? { subdivision: subdivisionParam } : {}),
-      // Free-text hero search uses ?q= → fuzzy multi-column search
-      // (address OR city OR subdivision) so users can find homes by
-      // neighborhood/development name, not just official city
-      ...(qParam ? { query_text: qParam } : {})
+      ...(qParam ? { query_text: qParam } : {}),
     };
   }
 
@@ -119,7 +128,13 @@ function applyFiltersToQuery(query, filters) {
   if (filters.hoa_filter === 'yes') query = query.eq('hoa_required', true);
   if (filters.hoa_filter === 'no') query = query.neq('hoa_required', true);
 
-  if (filters.city) query = query.ilike('city', `%${filters.city}%`);
+  // Multi-city filter (from ?city=Mesa,Tempe,Chandler URLs)
+  if (filters.cities?.length > 0) {
+    const orClauses = filters.cities.map(c => `city.ilike.%${c}%`).join(',');
+    query = query.or(orClauses);
+  } else if (filters.city) {
+    query = query.ilike('city', `%${filters.city}%`);
+  }
   if (filters.zip_code) query = query.ilike('zip_code', `%${filters.zip_code}%`);
   if (filters.subdivision) query = query.ilike('subdivision', `%${filters.subdivision}%`);
 
@@ -178,7 +193,7 @@ export default function Search() {
     saveSessionState({ filters, viewMode, currentPage, sortBy });
   }, [filters, viewMode, currentPage, sortBy]);
 
-  const hasActiveFilters = filters.city || filters.zip_code || filters.subdivision || filters.query_text || filters.bedrooms || filters.bathrooms ||
+  const hasActiveFilters = filters.city || filters.cities?.length > 0 || filters.zip_code || filters.subdivision || filters.query_text || filters.bedrooms || filters.bathrooms ||
     filters.min_price || filters.max_price || filters.min_sqft || (filters.property_types?.length > 0) ||
     filters.min_garage_spaces || filters.private_pool || filters.single_story;
 
@@ -473,9 +488,9 @@ export default function Search() {
                     : `${totalCount > PAGE_SIZE ? `${PAGE_SIZE}+` : totalCount} ${totalCount === 1 ? 'Home' : 'Homes'} Available`
                   }
                 </h2>
-                {filters.city && (
+                {(filters.city || filters.cities_label) && (
                   <p className="text-muted-foreground mt-1 text-sm">
-                    in {filters.city}
+                    in {filters.cities_label || filters.city}
                   </p>
                 )}
               </div>
