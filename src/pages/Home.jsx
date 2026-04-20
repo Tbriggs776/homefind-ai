@@ -25,6 +25,7 @@ export default function Home() {
   const [savedPropertyIds, setSavedPropertyIds] = useState([]);
   const [totalListings, setTotalListings] = useState('');
   const [heroSearchValue, setHeroSearchValue] = useState('');
+  const [selectedCities, setSelectedCities] = useState([]);
 
   useEffect(() => {
     const initPage = async () => {
@@ -119,8 +120,15 @@ export default function Home() {
     }
   };
 
-  const handleCityChip = (city) => {
-    navigate(`${createPageUrl('Search')}?city=${encodeURIComponent(city)}`);
+  const toggleCity = (city) => {
+    setSelectedCities(prev =>
+      prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]
+    );
+  };
+
+  const handleSearchCities = () => {
+    if (selectedCities.length === 0) return;
+    navigate(`${createPageUrl('Search')}?city=${encodeURIComponent(selectedCities.join(','))}`);
   };
 
   const firstName = user?.full_name?.split(' ')[0];
@@ -207,19 +215,41 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Quick city chips */}
+              {/* Quick city chips — toggle to stack multiple, then Search */}
               <div className="flex flex-wrap gap-2 mt-5">
-                <span className="text-white/60 text-sm self-center mr-1">Start with the areas we know best:</span>
-                {QUICK_CITIES.map((city) => (
-                  <button
-                    key={city}
-                    onClick={() => handleCityChip(city)}
-                    className="bg-white/10 hover:bg-white/20 text-white text-sm px-4 py-2 rounded-full transition-colors backdrop-blur-sm"
-                  >
-                    {city}
-                  </button>
-                ))}
+                <span className="text-white/60 text-sm self-center mr-1">
+                  {selectedCities.length > 0 ? 'Searching:' : 'Start with the areas we know best:'}
+                </span>
+                {QUICK_CITIES.map((city) => {
+                  const isSelected = selectedCities.includes(city);
+                  return (
+                    <button
+                      key={city}
+                      onClick={() => toggleCity(city)}
+                      aria-pressed={isSelected}
+                      className={`text-sm px-4 py-2 rounded-full transition-colors backdrop-blur-sm ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground hover:bg-[var(--crandell-primary-hover)]'
+                          : 'bg-white/10 hover:bg-white/20 text-white'
+                      }`}
+                    >
+                      {city}
+                    </button>
+                  );
+                })}
               </div>
+              {selectedCities.length > 0 && (
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    onClick={handleSearchCities}
+                    className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground px-5 py-5 font-semibold"
+                  >
+                    Search {selectedCities.length} {selectedCities.length === 1 ? 'city' : 'cities'}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              )}
           </div>
         </div>
       </section>

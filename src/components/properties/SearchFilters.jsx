@@ -41,9 +41,19 @@ const LISTING_STATUSES = [
   { value: 'pending', label: 'Pending / Under Contract' },
 ];
 
+const EAST_VALLEY_PRESETS = [
+  'Queen Creek',
+  'San Tan Valley',
+  'Gilbert',
+  'Mesa',
+  'Chandler',
+];
+
 const EMPTY_FILTERS = {
   status: '',
   city: '',
+  cities: [],
+  cities_label: '',
   zip_code: '',
   subdivision: '',
   query_text: '',
@@ -143,6 +153,98 @@ function FilterChip({ label, isActive, children, popoverWidth = 280 }) {
 }
 
 // ============================================================================
+// CITIES POPOVER — checkbox list of East Valley presets plus a free-text
+// "add another city" field. Lives outside the main component so its input
+// state survives across re-renders of the parent.
+// ============================================================================
+function CitiesPopoverContent({ filters, toggleCity, addCity, removeCity, close }) {
+  const [draft, setDraft] = useState('');
+  const selected = filters.cities || [];
+
+  const submitDraft = () => {
+    if (!draft.trim()) return;
+    addCity(draft);
+    setDraft('');
+  };
+
+  return (
+    <div className="space-y-3">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pb-2 border-b border-border">
+          {selected.map(c => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => removeCity(c)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20 transition-colors"
+            >
+              {c}
+              <X className="h-3 w-3" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <p className="text-xs text-muted-foreground mb-2">East Valley cities</p>
+        <div className="space-y-1.5">
+          {EAST_VALLEY_PRESETS.map(city => {
+            const isChecked = selected.some(c => c.toLowerCase() === city.toLowerCase());
+            return (
+              <div key={city} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`city-chip-${city}`}
+                  checked={isChecked}
+                  onCheckedChange={() => toggleCity(city)}
+                />
+                <label htmlFor={`city-chip-${city}`} className="text-sm text-foreground cursor-pointer">
+                  {city}
+                </label>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-3">
+        <p className="text-xs text-muted-foreground mb-2">Add another city</p>
+        <div className="flex gap-2">
+          <Input
+            placeholder="e.g. Scottsdale"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submitDraft(); }
+            }}
+            className="text-sm"
+          />
+          <Button
+            type="button"
+            size="sm"
+            onClick={submitDraft}
+            className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground"
+          >
+            Add
+          </Button>
+        </div>
+      </div>
+
+      {selected.length > 0 && (
+        <div className="flex justify-end pt-1">
+          <button
+            type="button"
+            onClick={close}
+            className="text-xs text-primary hover:underline"
+          >
+            Done
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
@@ -151,7 +253,7 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
   // Sync with initialFilters changes (e.g., from URL params on Search.jsx mount)
   useEffect(() => {
     setFilters(prev => ({ ...prev, ...initialFilters }));
-  }, [initialFilters.city, initialFilters.subdivision, initialFilters.zip_code, initialFilters.query_text]);
+  }, [initialFilters.city, initialFilters.subdivision, initialFilters.zip_code, initialFilters.query_text, (initialFilters.cities || []).join('|')]);
 
   // Apply on every change — no Apply button anymore
   const handleChange = (key, value) => {
@@ -182,10 +284,52 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
     handleChange(key, value);
   };
 
+  // Multi-city helpers — maintain filters.cities array (plus cities_label for the
+  // "in {label}" line on the results header) and clear the single-city field when
+  // the user starts picking multiple.
+  const addCity = (city) => {
+    const trimmed = city.trim();
+    if (!trimmed) return;
+    const existing = filters.cities || [];
+    if (existing.some(c => c.toLowerCase() === trimmed.toLowerCase())) return;
+    const next = [...existing, trimmed];
+    handleBatchChange({
+      cities: next,
+      cities_label: next.join(', '),
+      city: '',
+    });
+  };
+
+  const removeCity = (city) => {
+    const next = (filters.cities || []).filter(c => c !== city);
+    handleBatchChange({
+      cities: next,
+      cities_label: next.length > 0 ? next.join(', ') : '',
+    });
+  };
+
+  const toggleCity = (city) => {
+    const existing = filters.cities || [];
+    if (existing.some(c => c.toLowerCase() === city.toLowerCase())) {
+      removeCity(existing.find(c => c.toLowerCase() === city.toLowerCase()));
+    } else {
+      addCity(city);
+    }
+  };
+
   // Active filter labels for the tag pill row below the chips
   const activeFilterTags = [];
   if (filters.query_text) activeFilterTags.push({ key: 'query_text', label: `"${filters.query_text}"`, clearTo: '' });
   if (filters.city) activeFilterTags.push({ key: 'city', label: filters.city, clearTo: '' });
+  if (filters.cities?.length > 0) {
+    filters.cities.forEach(c => {
+      activeFilterTags.push({
+        key: `city_${c}`,
+        label: c,
+        clearAll: () => removeCity(c),
+      });
+    });
+  }
   if (filters.zip_code) activeFilterTags.push({ key: 'zip_code', label: filters.zip_code, clearTo: '' });
   if (filters.subdivision) activeFilterTags.push({ key: 'subdivision', label: filters.subdivision, clearTo: '' });
   if (filters.status && filters.status !== '') {
@@ -247,6 +391,12 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
   const homeTypeLabel = filters.property_types?.length > 0
     ? `${filters.property_types.length} type${filters.property_types.length === 1 ? '' : 's'}`
     : 'Home Type';
+  const cityCount = (filters.cities?.length || 0) + (filters.city ? 1 : 0);
+  const citiesLabel = cityCount === 0
+    ? 'Cities'
+    : cityCount === 1
+      ? (filters.city || filters.cities[0])
+      : `${cityCount} cities`;
 
   // ============================================================================
   // INNER POPOVER CONTENTS
@@ -364,6 +514,8 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
       </div>
     </div>
   );
+
+  const CitiesPopover = (close) => <CitiesPopoverContent filters={filters} toggleCity={toggleCity} addCity={addCity} removeCity={removeCity} close={close} />;
 
   const HomeTypePopover = (close) => (
     <div>
@@ -485,6 +637,10 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <FilterChip label={statusLabel} isActive={!!filters.status}>
           {StatusPopover}
+        </FilterChip>
+
+        <FilterChip label={citiesLabel} isActive={cityCount > 0} popoverWidth={300}>
+          {CitiesPopover}
         </FilterChip>
 
         <FilterChip label={priceLabel} isActive={!!filters.price_preset || !!filters.min_price || !!filters.max_price} popoverWidth={300}>
