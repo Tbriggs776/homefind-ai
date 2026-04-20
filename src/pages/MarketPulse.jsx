@@ -286,7 +286,7 @@ export default function MarketPulse() {
     <div className="min-h-screen bg-slate-50">
       {/* Page header */}
       <div className="border-b border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="crandell-container py-6">
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-3">
@@ -310,7 +310,7 @@ export default function MarketPulse() {
       </div>
 
       {/* Main content grid */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="crandell-container py-8 space-y-6">
         {hasError && (
           <Card className="border-red-200 bg-red-50">
             <CardContent className="p-4">
