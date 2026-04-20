@@ -7,9 +7,9 @@
  * @package HomeFinder_AI
  */
 
-defined( 'ABSPATH' ) || exit;
-
 namespace HomeFinder_AI;
+
+defined( 'ABSPATH' ) || exit;
 
 class Shortcode {
 

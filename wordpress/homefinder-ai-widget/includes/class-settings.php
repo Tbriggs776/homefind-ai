@@ -5,9 +5,9 @@
  * @package HomeFinder_AI
  */
 
-defined( 'ABSPATH' ) || exit;
-
 namespace HomeFinder_AI;
+
+defined( 'ABSPATH' ) || exit;
 
 /**
  * Registers the Settings > homeFinder AI admin page and all plugin options.
