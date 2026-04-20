@@ -7,10 +7,11 @@ import { PropertyCardSkeletonGrid } from '../components/properties/PropertyCardS
 import SearchFilters from '../components/properties/SearchFilters';
 import PropertyMap from '../components/properties/PropertyMap';
 import AIAssistant from '../components/ai/AIAssistant';
+import EmptyState from '../components/EmptyState';
 
 import NearbyBanner from '../components/properties/NearbyBanner';
 import { Button } from '@/components/ui/button';
-import { Loader2, Grid3x3, Map, Scale, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Grid3x3, Map, Scale, X, ChevronLeft, ChevronRight, SearchX } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
@@ -167,6 +168,7 @@ export default function Search() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [filters, setFilters] = useState(() => getInitialFilters(session?.filters));
+  const [filtersResetKey, setFiltersResetKey] = useState(0);
   const [savedPropertyIds, setSavedPropertyIds] = useState([]);
   const [viewMode, setViewMode] = useState(session?.viewMode || 'grid');
   const [comparePropertyIds, setComparePropertyIds] = useState([]);
@@ -472,7 +474,7 @@ export default function Search() {
       >
         <div className="space-y-6">
           {/* Filter chips — full-width row above the results */}
-          <SearchFilters onFilterChange={handleFilterChange} initialFilters={filters} />
+          <SearchFilters key={filtersResetKey} onFilterChange={handleFilterChange} initialFilters={filters} />
 
           <div>
             <NearbyBanner
@@ -553,10 +555,22 @@ export default function Search() {
             ) : isLoading ? (
               <PropertyCardSkeletonGrid count={9} />
             ) : properties.length === 0 ? (
-              <div className="text-center py-20">
-                <p className="text-foreground text-lg">No properties match your search criteria.</p>
-                <p className="text-muted-foreground mt-2">Try adjusting your filters.</p>
-              </div>
+              <EmptyState
+                icon={SearchX}
+                title="No homes match these filters"
+                description="Try widening your price range, removing a city, or clearing filters to see more listings."
+                action={
+                  <Button
+                    onClick={() => {
+                      handleFilterChange({});
+                      setFiltersResetKey(k => k + 1);
+                    }}
+                    className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground"
+                  >
+                    Clear all filters
+                  </Button>
+                }
+              />
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

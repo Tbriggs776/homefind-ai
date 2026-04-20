@@ -5,10 +5,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Bed, Bath, Square, Calendar, MapPin, TrendingUp, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Bed, Bath, Square, Calendar, MapPin, TrendingUp, Loader2, Sparkles, Scale } from 'lucide-react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import ReactMarkdown from 'react-markdown';
+import EmptyState from '../components/EmptyState';
 
 export default function PropertyCompare() {
   const { user, isAuthenticated, isLoadingAuth } = useAuth();
@@ -74,10 +75,18 @@ export default function PropertyCompare() {
   if (properties.length < 2) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-slate-600 text-lg mb-4">Not enough properties to compare</p>
-          <Link to={createPageUrl('Search')}><Button>Back to Search</Button></Link>
-        </div>
+        <EmptyState
+          icon={Scale}
+          title="Pick at least two homes to compare"
+          description="Select homes from the search grid by tapping Compare on each card, then come back here to view them side-by-side."
+          action={
+            <Link to={createPageUrl('Search')}>
+              <Button className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground">
+                Back to search
+              </Button>
+            </Link>
+          }
+        />
       </div>
     );
   }

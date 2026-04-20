@@ -4,12 +4,13 @@ import { useAuth } from '@/lib/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import PropertyCard from '../components/properties/PropertyCard';
 import RecommendedProperties from '../components/recommendations/RecommendedProperties';
+import EmptyState from '../components/EmptyState';
 import { Loader2, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { createPageUrl } from '@/utils';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 
 export default function SavedProperties() {
   const { user, isAuthenticated, isLoadingAuth } = useAuth();
@@ -82,14 +83,18 @@ export default function SavedProperties() {
             <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
           </div>
         ) : savedProperties.length === 0 ? (
-          <div className="text-center py-20">
-            <Heart className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">No Saved Properties</h2>
-            <p className="text-slate-600 mb-6">Start saving homes you love to keep track of them</p>
-            <Button onClick={() => window.location.href = createPageUrl('Search')} className="bg-slate-800 hover:bg-slate-700">
-              Search Properties
-            </Button>
-          </div>
+          <EmptyState
+            icon={Heart}
+            title="No saved homes yet"
+            description="Tap the heart on any listing to save it here and compare later."
+            action={
+              <Link to={createPageUrl('Search')}>
+                <Button className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground">
+                  Browse homes
+                </Button>
+              </Link>
+            }
+          />
         ) : (
           <>
             <div className="mb-8 bg-white rounded-lg p-6 shadow-sm border border-slate-100">
