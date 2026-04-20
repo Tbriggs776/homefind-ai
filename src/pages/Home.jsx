@@ -25,8 +25,6 @@ export default function Home() {
   const [savedPropertyIds, setSavedPropertyIds] = useState([]);
   const [totalListings, setTotalListings] = useState('');
   const [heroSearchValue, setHeroSearchValue] = useState('');
-  const [heroImages, setHeroImages] = useState([]);
-  const [heroIndex, setHeroIndex] = useState(0);
 
   useEffect(() => {
     const initPage = async () => {
@@ -51,33 +49,6 @@ export default function Home() {
         }
 
         setFeaturedProperties(featured);
-
-        // Collect the main photo from each featured listing for the hero rotator.
-        // If Tanner has no active listings, fall back to a few nice listings
-        // from the broader feed.
-        const images = featured
-          .filter(p => p.images?.length > 0)
-          .map(p => p.images[0]);
-
-        if (images.length > 0) {
-          setHeroImages(images);
-        } else {
-          // Fallback: grab a few nice-looking listing photos from the broader active set
-          const { data: fallbackData } = await supabase
-            .from('properties')
-            .select('images')
-            .eq('status', 'active')
-            .not('images', 'is', null)
-            .gte('price', 600000)
-            .order('created_at', { ascending: false })
-            .limit(4);
-          const fallbackImages = (fallbackData || [])
-            .filter(d => d.images?.[0])
-            .map(d => d.images[0]);
-          if (fallbackImages.length > 0) {
-            setHeroImages(fallbackImages);
-          }
-        }
 
         const countResult = await supabase
           .from('properties')
@@ -113,15 +84,6 @@ export default function Home() {
 
     initPage();
   }, [user]);
-
-  // Rotate hero images every 6 seconds with crossfade
-  useEffect(() => {
-    if (heroImages.length <= 1) return;
-    const timer = setInterval(() => {
-      setHeroIndex(prev => (prev + 1) % heroImages.length);
-    }, 6000);
-    return () => clearInterval(timer);
-  }, [heroImages.length]);
 
   const handleFavorite = async (property) => {
     if (!user) {
@@ -193,37 +155,15 @@ export default function Home() {
         />
 
         {/* Hero image — absolutely positioned to fill right half on desktop */}
-        {heroImages.length > 0 && (
-          <div className="absolute top-0 right-0 bottom-0 w-1/2 hidden lg:block">
-            {heroImages.map((img, idx) => (
-              <img
-                key={idx}
-                src={img}
-                alt="Featured Arizona home"
-                className="absolute inset-0 w-full h-full object-cover transition-opacity duration-1000"
-                style={{ opacity: idx === heroIndex ? 1 : 0 }}
-              />
-            ))}
-            {/* Gradient fade from dark left into image */}
-            <div className="absolute inset-0 bg-gradient-to-r from-secondary via-secondary/50 to-transparent w-1/3" />
-            {/* Dot indicators */}
-            {heroImages.length > 1 && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-                {heroImages.map((_, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setHeroIndex(idx)}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      idx === heroIndex ? 'bg-white w-4' : 'bg-white/50'
-                    }`}
-                    aria-label={`Show property ${idx + 1}`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <div className="absolute top-0 right-0 bottom-0 w-1/2 hidden lg:block">
+          <img
+            src="/hero-home.jpg"
+            alt="Luxury Arizona home at sunset"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          {/* Gradient fade from dark left into image */}
+          <div className="absolute inset-0 bg-gradient-to-r from-secondary via-secondary/50 to-transparent w-1/3" />
+        </div>
 
         <div className="crandell-container relative">
           <div className="max-w-xl py-16 md:py-24 lg:py-28">
