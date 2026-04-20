@@ -192,7 +192,7 @@ export default function Login() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-[#52ADEA] hover:bg-[#3a9dd8] text-white font-semibold py-5"
+                    className="w-full bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold py-5"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
                       <span className="flex items-center gap-2">Sign In <ArrowRight className="h-4 w-4" /></span>
@@ -250,7 +250,7 @@ export default function Login() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-[#52ADEA] hover:bg-[#3a9dd8] text-white font-semibold py-5"
+                    className="w-full bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold py-5"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
                       <span className="flex items-center gap-2">Create Account <ArrowRight className="h-4 w-4" /></span>
@@ -283,7 +283,7 @@ export default function Login() {
                   <Button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-[#52ADEA] hover:bg-[#3a9dd8] text-white font-semibold py-5"
+                    className="w-full bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold py-5"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
                       <span className="flex items-center gap-2">Send Magic Link <Mail className="h-4 w-4" /></span>
