@@ -55,10 +55,12 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
       {showLoginGate && <LoginGateModal onClose={() => setShowLoginGate(false)} />}
       <Card className={`overflow-hidden hover:shadow-xl transition-all duration-300 bg-white group ${isComparing ? 'ring-2 ring-primary' : 'border-border'}`}>
         <Link to={createPageUrl('PropertyDetail') + `?id=${property.id}`}>
-          <div className="relative h-56 overflow-hidden">
+          <div className="relative aspect-[3/2] bg-muted overflow-hidden">
             <img
               src={images[currentImageIndex]}
               alt={property.address}
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
             />
             <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
@@ -223,6 +225,8 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
                 <img
                   src="/armls-logo.png"
                   alt="ARMLS"
+                  loading="lazy"
+                  decoding="async"
                   className="h-4 w-auto"
                 />
               )}

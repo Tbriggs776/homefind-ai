@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { supabase, invokeFunction } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Loader2, Search, ArrowRight, Home as HomeIcon, DollarSign, CheckCircle } from 'lucide-react';
+import { Search, ArrowRight, Home as HomeIcon, DollarSign, CheckCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import PropertyCard from '../components/properties/PropertyCard';
+import { PropertyCardSkeletonGrid } from '../components/properties/PropertyCardSkeleton';
 import RecentlyViewed from '../components/home/RecentlyViewed';
 
 // Quick-filter chips for the East Valley cities Crandell specializes in.
@@ -167,6 +168,9 @@ export default function Home() {
           <img
             src="/hero-home.jpg"
             alt="Luxury Arizona home at sunset"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
             className="absolute inset-0 w-full h-full object-cover"
           />
           {/* Gradient fade from dark left into image */}
@@ -358,6 +362,8 @@ export default function Home() {
               <img
                 src="/team/team_crandell.jpg"
                 alt="The Crandell Real Estate Team"
+                loading="lazy"
+                decoding="async"
                 className="w-full rounded-xl object-cover shadow-lg cursor-pointer"
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
@@ -371,7 +377,7 @@ export default function Home() {
           ================================================================ */}
       <section className="py-16 md:py-20">
         <div className="crandell-container">
-          {featuredProperties.length > 0 ? (
+          {(loading || featuredProperties.length > 0) && (
             <div className="mb-16">
               <div className="text-center mb-12 max-w-2xl mx-auto">
                 <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-2">
@@ -386,9 +392,10 @@ export default function Home() {
               </div>
 
               {loading ? (
-                <div className="flex justify-center py-20">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
+                <PropertyCardSkeletonGrid
+                  count={8}
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {featuredProperties.map(property => (
@@ -402,11 +409,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-          ) : loading ? (
-            <div className="flex justify-center py-20">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : null}
+          )}
 
           {user && (
             <RecentlyViewed

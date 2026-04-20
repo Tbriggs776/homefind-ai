@@ -3,6 +3,7 @@ import { supabase } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import PropertyCard from '../components/properties/PropertyCard';
+import { PropertyCardSkeletonGrid } from '../components/properties/PropertyCardSkeleton';
 import SearchFilters from '../components/properties/SearchFilters';
 import PropertyMap from '../components/properties/PropertyMap';
 import AIAssistant from '../components/ai/AIAssistant';
@@ -550,9 +551,7 @@ export default function Search() {
                 />
               )
             ) : isLoading ? (
-              <div className="flex justify-center items-center py-20">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
+              <PropertyCardSkeletonGrid count={9} />
             ) : properties.length === 0 ? (
               <div className="text-center py-20">
                 <p className="text-foreground text-lg">No properties match your search criteria.</p>

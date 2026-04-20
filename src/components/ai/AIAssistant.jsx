@@ -264,7 +264,7 @@ What would you like to know?`
                             {message.images && message.images.length > 0 && (
                               <div className="flex gap-1 flex-wrap mb-2">
                                 {message.images.map((url, i) => (
-                                  <img key={i} src={url} className="w-20 h-20 object-cover rounded" />
+                                  <img key={i} src={url} alt="" loading="lazy" decoding="async" className="w-20 h-20 object-cover rounded" />
                                 ))}
                               </div>
                             )}
@@ -294,7 +294,7 @@ What would you like to know?`
                     <div className="flex gap-2 mb-2 flex-wrap">
                       {selectedImages.map((url, idx) => (
                         <div key={idx} className="relative">
-                          <img src={url} className="w-16 h-16 object-cover rounded border" />
+                          <img src={url} alt="" loading="lazy" decoding="async" className="w-16 h-16 object-cover rounded border" />
                           <button
                             onClick={() => removeImage(idx)}
                             className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"

@@ -117,8 +117,8 @@ export default function PropertyCompare() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {properties.map((property, idx) => (
             <Card key={property.id} className="overflow-hidden shadow-lg border-slate-200">
-              <div className="relative h-48">
-                <img src={property.images?.[0] || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80'} alt={property.address} className="w-full h-full object-cover" />
+              <div className="relative aspect-[3/2] bg-muted">
+                <img src={property.images?.[0] || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80'} alt={property.address} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 <div className="absolute top-3 left-3"><Badge className="bg-slate-800 text-white">Property {idx + 1}</Badge></div>
               </div>
               <CardContent className="p-6 space-y-6">

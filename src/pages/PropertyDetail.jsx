@@ -17,6 +17,7 @@ import AIAssistant from '../components/ai/AIAssistant';
 import LoginGateModal from '../components/LoginGateModal';
 import ShareButton from '../components/properties/ShareButton';
 import PropertyCard from '../components/properties/PropertyCard';
+import PropertyDetailSkeleton from '../components/properties/PropertyDetailSkeleton';
 
 // ============================================================================
 // MORTGAGE PAYMENT CALCULATION
@@ -282,11 +283,7 @@ export default function PropertyDetail() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PropertyDetailSkeleton />;
   }
 
   if (!property) {
@@ -329,8 +326,15 @@ export default function PropertyDetail() {
                 Mobile keeps the smaller height for vertical space efficiency.
                 ================================================================ */}
             <Card className="overflow-hidden shadow-lg border-border">
-              <div className="relative h-96 md:h-[500px] lg:h-[600px] bg-muted group">
-                <img src={images[currentImageIndex]} alt={property.address} className="w-full h-full object-cover" />
+              <div className="relative aspect-[4/3] bg-muted group">
+                <img
+                  src={images[currentImageIndex]}
+                  alt={property.address}
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                  className="w-full h-full object-cover"
+                />
                 {images.length > 1 && (
                   <>
                     <button onClick={handlePrevImage} className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center"><ChevronLeft className="h-6 w-6 text-white" /></button>
@@ -479,6 +483,8 @@ export default function PropertyDetail() {
                     <img
                       src="/team/tanner.jpg"
                       alt="Tanner Crandell"
+                      loading="lazy"
+                      decoding="async"
                       className="w-14 h-14 rounded-full object-cover bg-muted shadow-sm"
                       onError={(e) => { e.target.style.display = 'none'; }}
                     />
@@ -678,7 +684,7 @@ export default function PropertyDetail() {
               <div className="bg-muted/50 rounded-lg p-4 text-xs text-muted-foreground space-y-2">
                 {property.listing_source === 'flexmls_idx' && (
                   <div className="flex items-center justify-center pb-2 border-b border-border">
-                    <img src="/armls-logo.png" alt="ARMLS" className="h-6 object-contain" />
+                    <img src="/armls-logo.png" alt="ARMLS" loading="lazy" decoding="async" className="h-6 object-contain" />
                   </div>
                 )}
 
@@ -753,7 +759,7 @@ export default function PropertyDetail() {
         <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
           <button onClick={() => setIsFullscreen(false)} className="absolute top-4 right-4 h-12 w-12 bg-black/90 hover:bg-black backdrop-blur-sm rounded-full flex items-center justify-center z-10"><X className="h-6 w-6 text-white" /></button>
           <div className="relative w-full h-full flex items-center justify-center p-4" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-            <img src={images[currentImageIndex]} alt={property.address} className="w-full h-full object-contain" />
+            <img src={images[currentImageIndex]} alt={property.address} decoding="async" className="w-full h-full object-contain" />
             {images.length > 1 && (
               <>
                 <button onClick={handlePrevImage} className="absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"><ChevronLeft className="h-7 w-7 text-white" /></button>
