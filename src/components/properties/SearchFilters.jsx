@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
 import { Search, SlidersHorizontal, X, ChevronDown } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import AdvancedFilters from './AdvancedFilters';
 
 // ============================================================================
@@ -96,17 +97,19 @@ const EMPTY_FILTERS = {
 };
 
 // ============================================================================
-// CHIP — a button that opens a popover. Hand-rolled with click-outside
-// detection so we don't depend on shadcn Popover (which may or may not be
-// installed in this codebase).
+// CHIP — a button that opens filter content. On desktop renders as a popover
+// anchored to the chip; on mobile renders as a bottom-sheet Drawer with a
+// sticky Apply footer. Content stays open after selections so users can see
+// their choice highlighted and dismiss intentionally.
 // ============================================================================
-function FilterChip({ label, isActive, children, popoverWidth = 280 }) {
+function FilterChip({ label, isActive, children, popoverWidth = 280, drawerTitle }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
+  const isMobile = useIsMobile();
 
-  // Click-outside detection
+  // Click-outside detection (desktop popover only)
   useEffect(() => {
-    if (!open) return;
+    if (!open || isMobile) return;
     function handleClick(e) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
         setOpen(false);
@@ -114,38 +117,73 @@ function FilterChip({ label, isActive, children, popoverWidth = 280 }) {
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [open]);
+  }, [open, isMobile]);
 
-  // Escape key closes
+  // Escape key closes (desktop popover only; Drawer handles its own)
   useEffect(() => {
-    if (!open) return;
+    if (!open || isMobile) return;
     function handleKey(e) {
       if (e.key === 'Escape') setOpen(false);
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [open]);
+  }, [open, isMobile]);
+
+  const triggerButton = (
+    <button
+      onClick={() => setOpen(!open)}
+      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors whitespace-nowrap ${
+        isActive
+          ? 'bg-primary/10 text-primary border-primary'
+          : 'bg-white text-foreground border-border hover:border-primary/50'
+      }`}
+    >
+      {label}
+      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+    </button>
+  );
+
+  const renderChildren = (close) =>
+    typeof children === 'function' ? children(close) : children;
+
+  if (isMobile) {
+    // No-op close on mobile — the Apply button is the single dismiss affordance,
+    // so per-selection popover closes don't slam the drawer shut mid-interaction.
+    return (
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerTrigger asChild>{triggerButton}</DrawerTrigger>
+        <DrawerContent className="max-h-[85vh] flex flex-col">
+          <DrawerHeader className="flex-shrink-0">
+            <DrawerTitle>{drawerTitle || label}</DrawerTitle>
+          </DrawerHeader>
+          <div className="flex-1 overflow-y-auto px-4 pb-4 overscroll-contain">
+            {renderChildren(() => {})}
+          </div>
+          <div
+            className="flex-shrink-0 border-t border-border bg-white px-4 py-3"
+            style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          >
+            <Button
+              onClick={() => setOpen(false)}
+              className="w-full bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground select-none h-12 text-base"
+            >
+              Apply
+            </Button>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
 
   return (
     <div className="relative" ref={wrapperRef}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-colors whitespace-nowrap ${
-          isActive
-            ? 'bg-primary/10 text-primary border-primary'
-            : 'bg-white text-foreground border-border hover:border-primary/50'
-        }`}
-      >
-        {label}
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
+      {triggerButton}
       {open && (
         <div
           className="absolute top-full left-0 mt-2 z-50 bg-white rounded-lg shadow-xl border border-border p-4"
           style={{ width: popoverWidth, maxWidth: '90vw' }}
         >
-          {typeof children === 'function' ? children(() => setOpen(false)) : children}
+          {renderChildren(() => setOpen(false))}
         </div>
       )}
     </div>
