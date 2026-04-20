@@ -326,10 +326,21 @@ export default function PropertyDetail() {
                 Mobile keeps the smaller height for vertical space efficiency.
                 ================================================================ */}
             <Card className="overflow-hidden shadow-lg border-border">
-              <div className="relative aspect-[4/3] bg-muted group">
+              <div
+                className="relative aspect-[4/3] bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                role={images.length > 1 ? 'region' : undefined}
+                aria-roledescription={images.length > 1 ? 'carousel' : undefined}
+                aria-label={images.length > 1 ? 'Property image gallery' : undefined}
+                tabIndex={images.length > 1 ? 0 : undefined}
+                onKeyDown={(e) => {
+                  if (images.length <= 1) return;
+                  if (e.key === 'ArrowLeft') { e.preventDefault(); handlePrevImage(); }
+                  else if (e.key === 'ArrowRight') { e.preventDefault(); handleNextImage(); }
+                }}
+              >
                 <img
                   src={images[currentImageIndex]}
-                  alt={property.address}
+                  alt={images.length > 1 ? `${property.address}, image ${currentImageIndex + 1} of ${images.length}` : property.address}
                   loading="eager"
                   fetchPriority="high"
                   decoding="async"
@@ -337,17 +348,25 @@ export default function PropertyDetail() {
                 />
                 {images.length > 1 && (
                   <>
-                    <button onClick={handlePrevImage} className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center"><ChevronLeft className="h-6 w-6 text-white" /></button>
-                    <button onClick={handleNextImage} className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center"><ChevronRight className="h-6 w-6 text-white" /></button>
+                    <button type="button" onClick={handlePrevImage} aria-label="Previous image" className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronLeft className="h-6 w-6 text-white" aria-hidden="true" /></button>
+                    <button type="button" onClick={handleNextImage} aria-label="Next image" className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronRight className="h-6 w-6 text-white" aria-hidden="true" /></button>
                   </>
                 )}
-                <button onClick={() => user ? setIsFullscreen(true) : setShowLoginGate(true)} className="absolute top-4 right-4 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center"><Expand className="h-5 w-5 text-white" /></button>
+                <button type="button" onClick={() => user ? setIsFullscreen(true) : setShowLoginGate(true)} aria-label="View image fullscreen" className="absolute top-4 right-4 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><Expand className="h-5 w-5 text-white" aria-hidden="true" /></button>
                 {images.length > 1 && (
                   <>
-                    <div className="absolute top-4 left-4 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-sm font-medium">{currentImageIndex + 1} / {images.length}</div>
-                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
+                    <div className="absolute top-4 left-4 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-sm font-medium" aria-live="polite" aria-atomic="true"><span className="sr-only">Image </span>{currentImageIndex + 1} / {images.length}</div>
+                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2" role="tablist" aria-label="Choose image">
                       {images.map((_, idx) => (
-                        <button key={idx} onClick={() => handleImageChange(idx)} className={`h-2 rounded-full transition-all ${idx === currentImageIndex ? 'w-8 bg-white' : 'w-2 bg-white/50 hover:bg-white/75'}`} />
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleImageChange(idx)}
+                          role="tab"
+                          aria-selected={idx === currentImageIndex}
+                          aria-label={`Go to image ${idx + 1}`}
+                          className={`h-2 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${idx === currentImageIndex ? 'w-8 bg-white' : 'w-2 bg-white/50 hover:bg-white/75'}`}
+                        />
                       ))}
                     </div>
                   </>
@@ -756,15 +775,20 @@ export default function PropertyDetail() {
 
       {/* Fullscreen Image Modal */}
       {isFullscreen && (
-        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-          <button onClick={() => setIsFullscreen(false)} className="absolute top-4 right-4 h-12 w-12 bg-black/90 hover:bg-black backdrop-blur-sm rounded-full flex items-center justify-center z-10"><X className="h-6 w-6 text-white" /></button>
+        <div
+          className="fixed inset-0 z-50 bg-black flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Property image fullscreen view"
+        >
+          <button type="button" onClick={() => setIsFullscreen(false)} aria-label="Close fullscreen" className="absolute top-4 right-4 h-12 w-12 bg-black/90 hover:bg-black backdrop-blur-sm rounded-full flex items-center justify-center z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><X className="h-6 w-6 text-white" aria-hidden="true" /></button>
           <div className="relative w-full h-full flex items-center justify-center p-4" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-            <img src={images[currentImageIndex]} alt={property.address} decoding="async" className="w-full h-full object-contain" />
+            <img src={images[currentImageIndex]} alt={images.length > 1 ? `${property.address}, image ${currentImageIndex + 1} of ${images.length}` : property.address} decoding="async" className="w-full h-full object-contain" />
             {images.length > 1 && (
               <>
-                <button onClick={handlePrevImage} className="absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"><ChevronLeft className="h-7 w-7 text-white" /></button>
-                <button onClick={handleNextImage} className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center"><ChevronRight className="h-7 w-7 text-white" /></button>
-                <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white font-medium">{currentImageIndex + 1} / {images.length}</div>
+                <button type="button" onClick={handlePrevImage} aria-label="Previous image" className="absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronLeft className="h-7 w-7 text-white" aria-hidden="true" /></button>
+                <button type="button" onClick={handleNextImage} aria-label="Next image" className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronRight className="h-7 w-7 text-white" aria-hidden="true" /></button>
+                <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white font-medium" aria-live="polite" aria-atomic="true"><span className="sr-only">Image </span>{currentImageIndex + 1} / {images.length}</div>
               </>
             )}
           </div>

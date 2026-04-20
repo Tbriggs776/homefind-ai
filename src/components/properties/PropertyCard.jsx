@@ -55,10 +55,15 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
       {showLoginGate && <LoginGateModal onClose={() => setShowLoginGate(false)} />}
       <Card className={`overflow-hidden hover:shadow-xl transition-all duration-300 bg-white group ${isComparing ? 'ring-2 ring-primary' : 'border-border'}`}>
         <Link to={createPageUrl('PropertyDetail') + `?id=${property.id}`}>
-          <div className="relative aspect-[3/2] bg-muted overflow-hidden">
+          <div
+            className="relative aspect-[3/2] bg-muted overflow-hidden"
+            role={images.length > 1 ? 'region' : undefined}
+            aria-roledescription={images.length > 1 ? 'carousel' : undefined}
+            aria-label={images.length > 1 ? `${property.address} — image ${currentImageIndex + 1} of ${images.length}` : undefined}
+          >
             <img
               src={images[currentImageIndex]}
-              alt={property.address}
+              alt={images.length > 1 ? `${property.address}, image ${currentImageIndex + 1} of ${images.length}` : property.address}
               loading="lazy"
               decoding="async"
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
@@ -123,18 +128,27 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
             {images.length > 1 && (
               <>
                 <button
+                  type="button"
                   onClick={handlePrevImage}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                  aria-label="Previous image"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
-                  <ChevronLeft className="h-5 w-5 text-white" />
+                  <ChevronLeft className="h-5 w-5 text-white" aria-hidden="true" />
                 </button>
                 <button
+                  type="button"
                   onClick={handleNextImage}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                  aria-label="Next image"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
-                  <ChevronRight className="h-5 w-5 text-white" />
+                  <ChevronRight className="h-5 w-5 text-white" aria-hidden="true" />
                 </button>
-                <div className="absolute bottom-3 right-3 px-2 py-1 bg-black/50 backdrop-blur-sm rounded text-white text-xs">
+                <div
+                  className="absolute bottom-3 right-3 px-2 py-1 bg-black/50 backdrop-blur-sm rounded text-white text-xs"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <span className="sr-only">Image </span>
                   {currentImageIndex + 1} / {images.length}
                 </div>
               </>
