@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "homefinder/featured-listings",
+  "version": "1.0.0",
+  "title": "homeFinder Featured Listings",
+  "category": "widgets",
+  "icon": "admin-home",
+  "description": "Displays featured property cards from homeFinder AI. Links back to homefind.ai.",
+  "keywords": ["homefinder", "real estate", "property", "listings", "featured"],
+  "textdomain": "homefinder-ai-widget",
+  "attributes": {
+    "limit": {
+      "type": "integer",
+      "default": 6,
+      "minimum": 1,
+      "maximum": 24
+    },
+    "layout": {
+      "type": "string",
+      "default": "grid",
+      "enum": ["grid", "carousel", "list"]
+    },
+    "columns": {
+      "type": "integer",
+      "default": 3,
+      "minimum": 1,
+      "maximum": 4
+    }
+  },
+  "supports": {
+    "html": false,
+    "align": ["wide", "full"],
+    "spacing": {
+      "margin": true,
+      "padding": true
+    }
+  },
+  "editorScript": "file:./editor.js",
+  "style": "homefinder-ai-widget"
+}

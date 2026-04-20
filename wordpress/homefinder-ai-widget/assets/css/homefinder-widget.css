@@ -1,0 +1,416 @@
+/*
+ * homeFinder AI Featured Listings — Widget Stylesheet
+ * All classes namespaced with hfai- to prevent collisions with host themes.
+ * No Tailwind, no external dependencies.
+ */
+
+/* =========================================================================
+   CSS Custom Properties
+   ========================================================================= */
+.hfai-widget {
+  --hfai-radius:        0.75rem;   /* rounded-xl */
+  --hfai-shadow:        0 2px 8px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.06);
+  --hfai-shadow-hover:  0 8px 24px rgba(0, 0, 0, 0.14), 0 0 1px rgba(0, 0, 0, 0.08);
+  --hfai-color-price:   #111827;
+  --hfai-color-muted:   #6b7280;
+  --hfai-color-muted2:  #9ca3af;
+  --hfai-color-border:  #e5e7eb;
+  --hfai-color-bg:      #ffffff;
+  --hfai-color-primary: #2563eb;
+  --hfai-gap:           1.25rem;
+  --hfai-transition:    all 0.25s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  box-sizing: border-box;
+}
+
+.hfai-widget *,
+.hfai-widget *::before,
+.hfai-widget *::after {
+  box-sizing: inherit;
+}
+
+/* =========================================================================
+   Grid layout
+   ========================================================================= */
+.hfai-widget .hfai-grid {
+  display: grid;
+  gap: var(--hfai-gap);
+  grid-template-columns: 1fr;       /* mobile: 1 col */
+}
+
+/* tablet: 2 cols */
+@media (min-width: 640px) {
+  .hfai-widget .hfai-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* desktop: respect --hfai-cols from inline style, fallback 3 */
+@media (min-width: 1024px) {
+  .hfai-widget.hfai-cols-1 .hfai-grid { grid-template-columns: 1fr; }
+  .hfai-widget.hfai-cols-2 .hfai-grid { grid-template-columns: repeat(2, 1fr); }
+  .hfai-widget.hfai-cols-3 .hfai-grid { grid-template-columns: repeat(3, 1fr); }
+  .hfai-widget.hfai-cols-4 .hfai-grid { grid-template-columns: repeat(4, 1fr); }
+  /* default when no col class */
+  .hfai-widget .hfai-grid         { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* =========================================================================
+   List layout
+   ========================================================================= */
+.hfai-widget .hfai-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hfai-gap);
+}
+
+.hfai-widget .hfai-card--list .hfai-card-link {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+}
+
+.hfai-widget .hfai-card--list .hfai-card-image-wrap {
+  height: 100%;
+  min-height: 160px;
+}
+
+@media (max-width: 639px) {
+  .hfai-widget .hfai-card--list .hfai-card-link {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================================
+   Carousel layout
+   ========================================================================= */
+.hfai-widget .hfai-carousel {
+  position: relative;
+  overflow: hidden;
+}
+
+.hfai-widget .hfai-carousel-track {
+  display: flex;
+  gap: var(--hfai-gap);
+  transition: transform 0.4s ease;
+  will-change: transform;
+}
+
+.hfai-widget .hfai-carousel-track .hfai-card {
+  flex: 0 0 calc(33.333% - var(--hfai-gap));
+  min-width: 260px;
+}
+
+@media (max-width: 767px) {
+  .hfai-widget .hfai-carousel-track .hfai-card {
+    flex: 0 0 calc(100% - var(--hfai-gap));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .hfai-widget .hfai-carousel-track .hfai-card {
+    flex: 0 0 calc(50% - var(--hfai-gap));
+  }
+}
+
+.hfai-widget .hfai-carousel-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--hfai-color-border);
+  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  transition: var(--hfai-transition);
+  color: var(--hfai-color-price);
+  padding: 0;
+}
+
+.hfai-widget .hfai-carousel-btn:hover {
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+}
+
+.hfai-widget .hfai-carousel-prev { left: 0.25rem; }
+.hfai-widget .hfai-carousel-next { right: 0.25rem; }
+
+.hfai-widget .hfai-carousel-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* =========================================================================
+   Card
+   ========================================================================= */
+.hfai-widget .hfai-card {
+  background: var(--hfai-color-bg);
+  border: 1px solid var(--hfai-color-border);
+  border-radius: var(--hfai-radius);
+  overflow: hidden;
+  box-shadow: var(--hfai-shadow);
+  transition: var(--hfai-transition);
+}
+
+.hfai-widget .hfai-card:hover {
+  box-shadow: var(--hfai-shadow-hover);
+  transform: translateY(-3px);
+}
+
+.hfai-widget .hfai-card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* =========================================================================
+   Card image
+   ========================================================================= */
+.hfai-widget .hfai-card-image-wrap {
+  position: relative;
+  overflow: hidden;
+  height: 14rem;           /* ~224px — matches React h-56 */
+  background: #f3f4f6;
+}
+
+.hfai-widget .hfai-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.5s ease;
+}
+
+.hfai-widget .hfai-card:hover .hfai-card-image {
+  transform: scale(1.07);
+}
+
+/* =========================================================================
+   Badges
+   ========================================================================= */
+.hfai-widget .hfai-badges {
+  position: absolute;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  z-index: 2;
+}
+
+.hfai-widget .hfai-badges--tl {
+  top: 0.65rem;
+  left: 0.65rem;
+}
+
+.hfai-widget .hfai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.hfai-widget .hfai-badge--active       { background: #16a34a; }
+.hfai-widget .hfai-badge--coming-soon  { background: #7c3aed; }
+.hfai-widget .hfai-badge--pending      { background: #d97706; }
+.hfai-widget .hfai-badge--featured     { background: var(--hfai-color-primary); }
+.hfai-widget .hfai-badge--reduced      { background: #dc2626; }
+.hfai-widget .hfai-badge--tour         { background: #4338ca; }
+.hfai-widget .hfai-badge--new-construction { background: #d97706; }
+.hfai-widget .hfai-badge--new          {
+  background: #dcfce7;
+  color: #15803d;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+}
+
+/* =========================================================================
+   Card body
+   ========================================================================= */
+.hfai-widget .hfai-card-body {
+  padding: 1.1rem 1.1rem 0.85rem;
+}
+
+/* Price row */
+.hfai-widget .hfai-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.hfai-widget .hfai-price {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--hfai-color-price);
+  letter-spacing: -0.02em;
+}
+
+.hfai-widget .hfai-price-sqft {
+  font-size: 0.8rem;
+  color: var(--hfai-color-muted);
+}
+
+/* Address */
+.hfai-widget .hfai-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  color: var(--hfai-color-muted);
+  margin: 0 0 0.4rem;
+  line-height: 1.4;
+}
+
+/* DOM */
+.hfai-widget .hfai-dom {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.hfai-widget .hfai-dom-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--hfai-color-muted);
+}
+
+/* Stats row */
+.hfai-widget .hfai-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  font-size: 0.82rem;
+  color: var(--hfai-color-muted);
+  margin-bottom: 0.75rem;
+}
+
+.hfai-widget .hfai-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Feature tags */
+.hfai-widget .hfai-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.hfai-widget .hfai-feature-tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: var(--hfai-color-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+/* =========================================================================
+   ARMLS compliance
+   ========================================================================= */
+.hfai-widget .hfai-armls-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
+.hfai-widget .hfai-armls-logo {
+  height: 1rem;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.hfai-widget .hfai-listed-by {
+  font-size: 0.65rem;
+  color: var(--hfai-color-muted2);
+  font-weight: 500;
+}
+
+.hfai-widget .hfai-agent-contact {
+  font-size: 0.65rem;
+  color: var(--hfai-color-muted2);
+  margin: 0 0 0.2rem;
+}
+
+.hfai-widget .hfai-disclaimer {
+  font-size: 0.62rem;
+  color: var(--hfai-color-muted2);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* =========================================================================
+   SVG icons
+   ========================================================================= */
+.hfai-widget .hfai-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex-shrink: 0;
+  vertical-align: -0.1em;
+}
+
+/* =========================================================================
+   Empty state
+   ========================================================================= */
+.hfai-widget .hfai-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--hfai-color-muted);
+  font-size: 0.9rem;
+  border: 1px dashed var(--hfai-color-border);
+  border-radius: var(--hfai-radius);
+}
+
+.hfai-widget .hfai-empty a {
+  color: var(--hfai-color-primary);
+  text-decoration: underline;
+}
+
+/* =========================================================================
+   Footer
+   ========================================================================= */
+.hfai-widget .hfai-footer {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--hfai-color-muted2);
+  margin-top: 1.25rem;
+  margin-bottom: 0;
+}
+
+.hfai-widget .hfai-footer a {
+  color: var(--hfai-color-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.hfai-widget .hfai-footer a:hover {
+  text-decoration: underline;
+}
+
+/* =========================================================================
+   Accessibility — focus rings
+   ========================================================================= */
+.hfai-widget .hfai-card-link:focus-visible,
+.hfai-widget .hfai-carousel-btn:focus-visible {
+  outline: 2px solid var(--hfai-color-primary);
+  outline-offset: 2px;
+}
