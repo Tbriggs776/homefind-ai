@@ -1,0 +1,17 @@
+{
+  "name": "HomeFind AI — Crandell Real Estate Team",
+  "short_name": "HomeFind AI",
+  "description": "Search Arizona real estate listings with AI-powered tools.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#5BA8D6",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
