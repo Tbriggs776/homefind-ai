@@ -154,6 +154,8 @@ export default function PropertyDetail() {
       interaction_type: 'view',
       duration_seconds: 0,
       viewed_images: 0
+    }).then(({ error }) => {
+      if (error) console.error('[tracking] property_views insert (mount) failed:', error);
     });
 
     return () => {
@@ -164,6 +166,8 @@ export default function PropertyDetail() {
         interaction_type: 'view',
         duration_seconds: duration,
         viewed_images: imagesViewed
+      }).then(({ error }) => {
+        if (error) console.error('[tracking] property_views insert (unmount) failed:', error);
       });
     };
   }, [user, propertyId]);
