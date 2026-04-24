@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { invokeFunction } from '@/api/supabaseClient';
 
-const RATES_CACHE_KEY = 'mortgage_rates_cache';
+// Bumped cache key so old 5-rate cached payloads (stale hardcoded fallbacks
+// from the pre-FRED-API version) are ignored on existing visitors' browsers.
+const RATES_CACHE_KEY = 'mortgage_rates_cache_v2';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 // Validate that all rates are real numbers — prevents cache poisoning
 function isValidRatesArray(arr) {
   return Array.isArray(arr)
-    && arr.length === 5
+    && arr.length === 2
     && arr.every(r => r && typeof r.rate === 'number' && r.rate > 0 && r.rate < 30);
 }
 
+// Shown only while the first fetch is in flight or if the edge function errors.
+// Real rates come from Freddie Mac PMMS via FRED (updated weekly on Thursdays).
 const FALLBACK_RATES = [
-  { label: '30-Yr Fixed', rate: 6.87 },
-  { label: '15-Yr Fixed', rate: 6.13 },
-  { label: '5/1 ARM', rate: 6.37 },
-  { label: 'FHA 30-Yr', rate: 6.62 },
-  { label: 'VA 30-Yr', rate: 6.57 },
+  { label: '30-Yr Fixed', rate: null },
+  { label: '15-Yr Fixed', rate: null },
 ];
 
 export default function MortgageRateTicker() {
@@ -54,9 +55,6 @@ export default function MortgageRateTicker() {
       const newRates = [
         { label: '30-Yr Fixed', rate: result.thirty_year_fixed },
         { label: '15-Yr Fixed', rate: result.fifteen_year_fixed },
-        { label: '5/1 ARM', rate: result.five_one_arm },
-        { label: 'FHA 30-Yr', rate: result.fha_thirty_year },
-        { label: 'VA 30-Yr', rate: result.va_thirty_year },
       ];
 
       // Only cache if the data is valid — prevents poisoning the cache
@@ -80,7 +78,9 @@ export default function MortgageRateTicker() {
     }
   };
 
-  const tickerItems = [...rates, ...rates]; // duplicate for seamless loop
+  // Duplicate 4× for a seamless scroll — with only 2 unique rates, 2× felt sparse.
+  // Animation still translates -50% (half the track), so perceived density stays smooth.
+  const tickerItems = [...rates, ...rates, ...rates, ...rates];
 
   return (
     <div className="bg-gray-900 text-white overflow-hidden border-t border-gray-700 max-w-[100vw]" style={{ height: '36px' }}>
