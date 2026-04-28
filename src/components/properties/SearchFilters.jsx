@@ -179,8 +179,11 @@ function FilterChip({ label, isActive, children, popoverWidth = 280, drawerTitle
     <div className="relative" ref={wrapperRef}>
       {triggerButton}
       {open && (
+        // z-[1100] beats Leaflet's internal stack (tilePane 200 → controls 1000)
+        // and PropertyMap.jsx's own overlays at z-[1000]. With z-50, the More
+        // popover would render UNDER the map.
         <div
-          className="absolute top-full left-0 mt-2 z-50 bg-white rounded-lg shadow-xl border border-border p-4"
+          className="absolute top-full left-0 mt-2 z-[1100] bg-white rounded-lg shadow-xl border border-border p-4"
           style={{ width: popoverWidth, maxWidth: '90vw' }}
         >
           {renderChildren(() => setOpen(false))}
