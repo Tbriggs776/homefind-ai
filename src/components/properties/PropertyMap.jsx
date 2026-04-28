@@ -22,12 +22,49 @@ function formatShortPrice(price) {
   return `$${price}`;
 }
 
-function createPriceIcon(price) {
+// Color the price-bubble pin by tier so users can scan a map at a glance
+// and tell premium areas apart from value areas. Tiers chosen for the AZ
+// East Valley market — adjust if you expand into much-higher-priced regions.
+function priceTierColor(price) {
+  if (price >= 1500000) return '#7C3AED';  // violet — $1.5M+ luxury
+  if (price >= 1000000) return '#2563EB';  // blue   — $1M–1.5M premium
+  if (price >=  700000) return '#0EA5E9';  // sky    — $700K–1M upper-mid
+  if (price >=  500000) return '#00AFE5';  // brand  — $500K–700K mid (default brand)
+  return '#10B981';                         // emerald — under $500K value
+}
+
+function createPriceIcon(price, isFavorited = false) {
   const label = formatShortPrice(price);
+  const bg = priceTierColor(price);
+
+  // Heart badge in the top-right corner when the property is saved. Lets
+  // the user scan the map and see which pins they've already favorited
+  // without clicking each popup.
+  const heartBadge = isFavorited
+    ? `<span style="
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: #EF4444;
+        color: white;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        line-height: 1;
+        border: 1.5px solid white;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      ">♥</span>`
+    : '';
+
   return L.divIcon({
     className: 'custom-price-marker',
     html: `<div style="
-      background: #00AFE5;
+      position: relative;
+      background: ${bg};
       color: white;
       padding: 4px 8px;
       border-radius: 6px;
@@ -38,7 +75,7 @@ function createPriceIcon(price) {
       border: 2px solid white;
       text-align: center;
       line-height: 1.2;
-    ">${label}</div>`,
+    ">${label}${heartBadge}</div>`,
     iconSize: [70, 28],
     iconAnchor: [35, 28],
     popupAnchor: [0, -30],
@@ -204,7 +241,7 @@ export default function PropertyMap({ properties, mapProperties, onFavorite, sav
               <Marker
                 key={property.id}
                 position={[property.latitude, property.longitude]}
-                icon={createPriceIcon(property.price)}
+                icon={createPriceIcon(property.price, savedPropertyIds?.includes(property.id))}
               >
                 <Popup>
                   <div className="w-[280px]">
