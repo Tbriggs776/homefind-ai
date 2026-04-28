@@ -139,3 +139,127 @@ DO $cron$ BEGIN
     $cmd$
   );
 END $cron$;
+
+-- =============================================================================
+-- New jobs added 2026-04-28 — previously unscheduled functions ported from
+-- Base44 that should run on a cadence.
+-- Times are staggered 5 min apart in the 09:00–09:15 UTC window to avoid
+-- edge-function concurrency stampedes against Supabase's per-project pool.
+-- =============================================================================
+
+-- ─── 6. daily-cleanup-featured-flags — daily 09:00 UTC (2am AZ) ────────────
+-- Removes the is_featured flag from properties whose MLS status is no longer
+-- Active. Idempotent: re-running just no-ops on already-cleaned rows.
+DO $cron$ BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'daily-cleanup-featured-flags') THEN
+    PERFORM cron.unschedule('daily-cleanup-featured-flags');
+  END IF;
+  PERFORM cron.schedule(
+    'daily-cleanup-featured-flags',
+    '0 9 * * *',
+    $cmd$
+      SELECT net.http_post(
+        url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/cleanupFeaturedFlags',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
+        ),
+        body := '{}'::jsonb
+      );
+    $cmd$
+  );
+END $cron$;
+
+-- ─── 7. daily-check-engagement-drops — daily 09:05 UTC (2:05am AZ) ─────────
+-- Detects users inactive >7 days and creates Follow Up Boss tasks with AI
+-- summaries. Read-mostly; idempotent against duplicate alert creation.
+DO $cron$ BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'daily-check-engagement-drops') THEN
+    PERFORM cron.unschedule('daily-check-engagement-drops');
+  END IF;
+  PERFORM cron.schedule(
+    'daily-check-engagement-drops',
+    '5 9 * * *',
+    $cmd$
+      SELECT net.http_post(
+        url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/checkEngagementDrops',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
+        ),
+        body := '{}'::jsonb
+      );
+    $cmd$
+  );
+END $cron$;
+
+-- ─── 8. daily-update-dormant-users — daily 09:10 UTC (2:10am AZ) ───────────
+-- Marks profiles inactive >30 days as dormant. Drives the user lifecycle
+-- segmentation used by FUB sync and dashboard filtering.
+DO $cron$ BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'daily-update-dormant-users') THEN
+    PERFORM cron.unschedule('daily-update-dormant-users');
+  END IF;
+  PERFORM cron.schedule(
+    'daily-update-dormant-users',
+    '10 9 * * *',
+    $cmd$
+      SELECT net.http_post(
+        url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/updateDormantUsers',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
+        ),
+        body := '{}'::jsonb
+      );
+    $cmd$
+  );
+END $cron$;
+
+-- ─── 9. daily-backfill-coordinates — daily 09:15 UTC (2:15am AZ) ───────────
+-- Geocodes up to 50 properties missing lat/lng via Nominatim (1 req/sec rate
+-- limit, so ~1 min runtime). New listings without coords are caught the next
+-- morning and become map-pinnable within 24 hrs.
+DO $cron$ BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'daily-backfill-coordinates') THEN
+    PERFORM cron.unschedule('daily-backfill-coordinates');
+  END IF;
+  PERFORM cron.schedule(
+    'daily-backfill-coordinates',
+    '15 9 * * *',
+    $cmd$
+      SELECT net.http_post(
+        url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/backfillPropertyCoordinates',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
+        ),
+        body := '{}'::jsonb
+      );
+    $cmd$
+  );
+END $cron$;
+
+-- ─── 10. weekly-dedupe-properties — Sun 06:00 UTC (Sat 11pm AZ) ────────────
+-- Calls a PL/pgSQL RPC to identify duplicate listings (by external_listing_id)
+-- and deletes them. Run weekly on Sunday morning so any false positives are
+-- caught before Monday business activity.
+DO $cron$ BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'weekly-dedupe-properties') THEN
+    PERFORM cron.unschedule('weekly-dedupe-properties');
+  END IF;
+  PERFORM cron.schedule(
+    'weekly-dedupe-properties',
+    '0 6 * * 0',
+    $cmd$
+      SELECT net.http_post(
+        url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/removeDuplicateProperties',
+        headers := jsonb_build_object(
+          'Content-Type', 'application/json',
+          'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
+        ),
+        body := '{}'::jsonb
+      );
+    $cmd$
+  );
+END $cron$;
