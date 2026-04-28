@@ -19,10 +19,15 @@ const DrawerPortal = DrawerPrimitive.Portal
 
 const DrawerClose = DrawerPrimitive.Close
 
+// z-[1200] beats Leaflet's internal stack (panes top out around 700, controls
+// at 1000) and PropertyMap's overlay buttons (z-[1000]) and the FilterChip
+// popover (z-[1100]). The shadcn default of z-50 is too low for any app that
+// embeds a map, video player, or other widget that uses high z-indices —
+// drawers are modal interruptions and should always be on top.
 const DrawerOverlay = React.forwardRef(({ className, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    className={cn("fixed inset-0 z-50 bg-black/80", className)}
+    className={cn("fixed inset-0 z-[1200] bg-black/80", className)}
     {...props} />
 ))
 DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName
@@ -33,7 +38,7 @@ const DrawerContent = React.forwardRef(({ className, children, ...props }, ref) 
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+        "fixed inset-x-0 bottom-0 z-[1200] mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
         className
       )}
       {...props}>
