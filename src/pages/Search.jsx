@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import PropertyCard from '../components/properties/PropertyCard';
 import { PropertyCardSkeletonGrid } from '../components/properties/PropertyCardSkeleton';
 import SearchFilters from '../components/properties/SearchFilters';
@@ -340,6 +340,10 @@ export default function Search() {
       return data || [];
     },
     staleTime: 30000,  // cache map data for 30s — pan-back-to-prior-area reuses result
+    // Hold onto the previous result while a new query is in flight, so when
+    // the user zooms/pans we don't flip isLoading=true (which would unmount
+    // PropertyMap below and reset the Leaflet view to its initial center).
+    placeholderData: keepPreviousData,
   });
 
   // Fetch saved properties
@@ -622,21 +626,21 @@ export default function Search() {
             </div>
 
             {viewMode === 'map' ? (
-              // Map view — uses the dedicated mapProperties query (up to 500 pins)
-              mapLoading ? (
-                <div className="flex justify-center items-center py-20">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <PropertyMap
-                  properties={properties}
-                  mapProperties={mapProperties}
-                  onFavorite={handleFavorite}
-                  savedPropertyIds={savedPropertyIds}
-                  onBoundsChange={handleBoundsChange}
-                  fitVersion={mapFitVersion}
-                />
-              )
+              // Map view — render unconditionally. We never unmount PropertyMap
+              // on loading because that would re-initialize Leaflet and yank
+              // the user's pan/zoom back to the initial fit. With
+              // placeholderData: keepPreviousData on the map query, isLoading
+              // only fires on the very first load (no prior data); subsequent
+              // bounds-driven refetches keep the previous pins visible until
+              // the new ones arrive.
+              <PropertyMap
+                properties={properties}
+                mapProperties={mapProperties}
+                onFavorite={handleFavorite}
+                savedPropertyIds={savedPropertyIds}
+                onBoundsChange={handleBoundsChange}
+                fitVersion={mapFitVersion}
+              />
             ) : isLoading ? (
               <PropertyCardSkeletonGrid count={9} />
             ) : properties.length === 0 ? (
