@@ -83,17 +83,25 @@ function MapBoundsHandler({ onBoundsChange }) {
   return null;
 }
 
-function FitBounds({ properties }) {
+// Fits the map viewport to the property set on initial mount, then again
+// whenever fitVersion increments. The parent (Search.jsx) bumps fitVersion
+// when the user changes filters — without that signal, the map would stay
+// zoomed on the previous city even though the property data has changed.
+//
+// We deliberately do NOT re-fit on every `properties` change, because with
+// bounds-driven querying the property set updates on every pan/zoom, and
+// re-fitting would yank the user's view back and forth.
+function FitBounds({ properties, fitVersion = 0 }) {
   const map = useMap();
-  const fitted = useRef(false);
+  const lastFitVersionRef = useRef(-1);
 
   useEffect(() => {
-    if (properties.length > 0 && !fitted.current) {
-      const bounds = L.latLngBounds(properties.map(p => [p.latitude, p.longitude]));
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-      fitted.current = true;
-    }
-  }, [properties, map]);
+    if (properties.length === 0) return;
+    if (lastFitVersionRef.current === fitVersion) return;
+    const bounds = L.latLngBounds(properties.map(p => [p.latitude, p.longitude]));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    lastFitVersionRef.current = fitVersion;
+  }, [properties, fitVersion, map]);
 
   return null;
 }
@@ -119,7 +127,7 @@ function RefitButton({ properties }) {
   );
 }
 
-export default function PropertyMap({ properties, mapProperties, onFavorite, savedPropertyIds, onBoundsChange }) {
+export default function PropertyMap({ properties, mapProperties, onFavorite, savedPropertyIds, onBoundsChange, fitVersion = 0 }) {
   // Prefer the dedicated lite mapProperties when present (decoupled query),
   // fall back to the full properties array for backward compat
   const sourceProperties = mapProperties && mapProperties.length > 0 ? mapProperties : properties;
@@ -133,9 +141,12 @@ export default function PropertyMap({ properties, mapProperties, onFavorite, sav
     ), [sourceProperties]
   );
 
+  // Center + zoom defaults used only when the property set is empty AND on
+  // very first render (FitBounds takes over once data loads). Centered on
+  // Phoenix to give a sensible AZ-wide default per Crandell's service area.
   const center = validProperties.length > 0
     ? [validProperties[0].latitude, validProperties[0].longitude]
-    : [33.3062, -111.8413]; // Queen Creek area
+    : [33.4484, -112.0740]; // Phoenix, AZ
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('en-US', {
@@ -175,7 +186,7 @@ export default function PropertyMap({ properties, mapProperties, onFavorite, sav
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          <FitBounds properties={validProperties} />
+          <FitBounds properties={validProperties} fitVersion={fitVersion} />
           <RefitButton properties={validProperties} />
           {onBoundsChange && <MapBoundsHandler onBoundsChange={onBoundsChange} />}
 

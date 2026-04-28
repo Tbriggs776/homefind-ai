@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -27,13 +27,30 @@ function getDistanceMiles(lat1, lon1, lat2, lon2) {
 
 const SESSION_KEY = 'search_state';
 
-// How many properties to fetch for the map view. The map query is "lite" —
-// it only fetches the columns needed to render a pin and a popup, so the
-// payload per row is roughly 1/5 the size of a full property row. 500 rows
-// of lite data is roughly equivalent to 100 rows of full data in bandwidth.
-// With clustering enabled in PropertyMap, 500 pins is plenty for the entire
-// East Valley plus surrounding metro.
-const MAP_QUERY_LIMIT = 500;
+// Map query is "lite" — only the columns needed for pins + popup cards, so
+// the payload per row is ~1/5 of a full property row. The historical 500-row
+// cap was an arbitrary safety net; with bounds-driven filtering, the real
+// limit becomes the user's current viewport. We keep a hard ceiling of 2000
+// rows to protect against pathological zoom-out cases (e.g., zooming all the
+// way out to the continental US would otherwise fetch the full 34k-row table).
+const MAP_QUERY_HARD_CAP = 2000;
+// Fallback cap when no map bounds are known yet (initial page load before the
+// map mounts). Smaller because we have no geographic constraint.
+const MAP_QUERY_INITIAL_LIMIT = 500;
+// Debounce window for bounds-driven query refetch. Leaflet fires moveend on
+// every pan/zoom; without debounce we'd thrash Supabase during a pinch-zoom.
+const BOUNDS_DEBOUNCE_MS = 400;
+
+// Apply a Leaflet-style bounding box to a Supabase query.
+// Used by both the grid query (when lockToBounds is on) and the map query.
+function applyBoundsToQuery(query, bounds) {
+  if (!bounds) return query;
+  return query
+    .gte('latitude',  bounds.south)
+    .lte('latitude',  bounds.north)
+    .gte('longitude', bounds.west)
+    .lte('longitude', bounds.east);
+}
 
 function loadSessionState() {
   try {
@@ -189,12 +206,38 @@ export default function Search() {
     } catch { return 'prompt'; }
   });
 
+  // Current viewport of the map, captured from Leaflet's moveend event in
+  // PropertyMap and debounced so we don't thrash queries during a pan.
+  // null until the map first mounts, then a {south, west, north, east} object.
+  const [mapBounds, setMapBounds] = useState(session?.mapBounds || null);
+  // When true, the grid list also filters to whatever's currently in the map
+  // viewport. Default on per the user's preference: "I like seeing all homes
+  // in the area displayed" → list and map should reflect the same area.
+  const [lockToBounds, setLockToBounds] = useState(session?.lockToBounds ?? true);
+  // Bumped on filter change to tell PropertyMap to re-fit its viewport to
+  // the new property set. Without this, switching cities while in map view
+  // leaves the map zoomed on the old city.
+  const [mapFitVersion, setMapFitVersion] = useState(0);
+  const boundsDebounceRef = useRef(null);
+
+  const handleBoundsChange = useCallback((leafletBounds) => {
+    if (boundsDebounceRef.current) clearTimeout(boundsDebounceRef.current);
+    boundsDebounceRef.current = setTimeout(() => {
+      setMapBounds({
+        south: leafletBounds.getSouth(),
+        west:  leafletBounds.getWest(),
+        north: leafletBounds.getNorth(),
+        east:  leafletBounds.getEast(),
+      });
+    }, BOUNDS_DEBOUNCE_MS);
+  }, []);
+
   const PAGE_SIZE = 50;
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    saveSessionState({ filters, viewMode, currentPage, sortBy });
-  }, [filters, viewMode, currentPage, sortBy]);
+    saveSessionState({ filters, viewMode, currentPage, sortBy, mapBounds, lockToBounds });
+  }, [filters, viewMode, currentPage, sortBy, mapBounds, lockToBounds]);
 
   const hasActiveFilters = filters.city || filters.cities?.length > 0 || filters.zip_code || filters.subdivision || filters.query_text || filters.bedrooms || filters.bathrooms ||
     filters.min_price || filters.max_price || filters.min_sqft || (filters.property_types?.length > 0) ||
@@ -202,12 +245,19 @@ export default function Search() {
 
   // ============================================================================
   // GRID QUERY — full property data, paginated, 50 per page
+  // When lockToBounds is on AND we have map bounds, the grid list also
+  // narrows to the current viewport so the list matches what's on the map.
   // ============================================================================
+  // Only feed bounds to the query when both conditions are met. We include
+  // them in the queryKey so React Query refetches on pan/zoom without us
+  // having to manually invalidate.
+  const gridBoundsActive = lockToBounds && mapBounds;
   const { data: properties = [], isLoading } = useQuery({
-    queryKey: ['properties', filters, currentPage, userLocation?.lat, sortBy],
+    queryKey: ['properties', filters, currentPage, userLocation?.lat, sortBy, gridBoundsActive ? mapBounds : null],
     queryFn: async () => {
       let query = supabase.from('properties').select('*');
       query = applyFiltersToQuery(query, filters);
+      if (gridBoundsActive) query = applyBoundsToQuery(query, mapBounds);
 
       // Sort ordering
       if (sortBy === 'price_low') {
@@ -257,29 +307,39 @@ export default function Search() {
   });
 
   // ============================================================================
-  // MAP QUERY — lite property data (just enough for pins + popups), up to 500
+  // MAP QUERY — lite property data (just enough for pins + popups)
   // ----------------------------------------------------------------------------
   // Runs in parallel with the grid query on every filter change. Uses a
   // separate cache key so the two don't conflict. Always runs (not gated on
   // viewMode) so the data is cached by the time the user clicks Map view.
-  // The lite payload (~13 columns vs select('*')) keeps this fast even at 500
-  // rows.
+  // The lite payload (~13 columns vs select('*')) keeps this fast even at
+  // thousands of rows.
+  //
+  // Bounds-driven: when mapBounds is set (after the map first mounts and
+  // emits its initial moveend), we filter to the current viewport and lift
+  // the row cap from 500 → MAP_QUERY_HARD_CAP=2000. The geographic filter
+  // makes the cap effectively unreachable except when zoomed all the way out.
   // ============================================================================
   const { data: mapProperties = [], isLoading: mapLoading } = useQuery({
-    queryKey: ['mapProperties', filters],
+    queryKey: ['mapProperties', filters, mapBounds],
     queryFn: async () => {
       let query = supabase
         .from('properties')
         .select('id, latitude, longitude, price, address, city, state, zip_code, bedrooms, bathrooms, square_feet, images, cross_street');
 
       query = applyFiltersToQuery(query, filters);
-      query = query.limit(MAP_QUERY_LIMIT);
+      if (mapBounds) {
+        query = applyBoundsToQuery(query, mapBounds);
+        query = query.limit(MAP_QUERY_HARD_CAP);
+      } else {
+        query = query.limit(MAP_QUERY_INITIAL_LIMIT);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
-    staleTime: 30000,  // cache map data for 30s — same filters within 30s reuses result
+    staleTime: 30000,  // cache map data for 30s — pan-back-to-prior-area reuses result
   });
 
   // Fetch saved properties
@@ -422,6 +482,13 @@ export default function Search() {
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
     setCurrentPage(1);
+    // Reset map bounds + bump fit version so the next render of PropertyMap
+    // re-fits to the new property set. Without this, switching from "Queen
+    // Creek" to "Mesa" would keep the map zoomed on Queen Creek and the
+    // bounds-filtered map query would return zero Mesa homes, leaving the
+    // map empty.
+    setMapBounds(null);
+    setMapFitVersion(v => v + 1);
 
     if (user) {
       (async () => {
@@ -515,6 +582,22 @@ export default function Search() {
                   </select>
                 </div>
 
+                {/* Lock-to-bounds toggle: visible only in Map view (where it
+                    has any effect). When on, the grid list also filters to
+                    whatever's currently in the map viewport, so panning the
+                    map updates both panels in sync. */}
+                {viewMode === 'map' && (
+                  <label className="flex items-center gap-2 text-sm text-foreground select-none cursor-pointer whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={lockToBounds}
+                      onChange={(e) => setLockToBounds(e.target.checked)}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary"
+                    />
+                    Filter list to map area
+                  </label>
+                )}
+
                 <div className="flex gap-2">
                   <Button
                     variant={viewMode === 'grid' ? 'default' : 'outline'}
@@ -550,6 +633,8 @@ export default function Search() {
                   mapProperties={mapProperties}
                   onFavorite={handleFavorite}
                   savedPropertyIds={savedPropertyIds}
+                  onBoundsChange={handleBoundsChange}
+                  fitVersion={mapFitVersion}
                 />
               )
             ) : isLoading ? (
