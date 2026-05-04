@@ -52,13 +52,20 @@ serve(async (req) => {
     console.log(`[checkInactiveListings] scanned ${localKeys.size} local listings`);
 
     // ─── Step 2: Get all ACTIVE listing keys from Spark API ───────────────
+    // Spark Replication API does NOT use OData v4 @odata.nextLink. The
+    // skiptoken for the next page is the Id of the last result on the
+    // current page. Same pattern as syncSparkApiListings (see comments
+    // there at line ~365). Loop terminates when a page returns fewer
+    // results than the page size.
     const sparkActiveKeys = new Set<string>();
     let skipToken = '';
     let page = 0;
 
     while (page < MAX_SPARK_PAGES) {
-      let url = `${SPARK_API_BASE}/listings?_limit=${SPARK_PAGE_SIZE}&_select=ListingKey&_filter=MlsStatus Eq 'Active'`;
-      if (skipToken) url += `&_skiptoken=${skipToken}`;
+      const url = `${SPARK_API_BASE}/listings?_limit=${SPARK_PAGE_SIZE}` +
+        `&_filter=${encodeURIComponent("MlsStatus Eq 'Active'")}` +
+        `&_select=ListingKey,Id` +
+        (skipToken ? `&_skiptoken=${skipToken}` : '');
 
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
@@ -72,11 +79,17 @@ serve(async (req) => {
       const results = data?.D?.Results || [];
       if (results.length === 0) break;
 
-      results.forEach((r: any) => sparkActiveKeys.add(r.ListingKey || r.Id));
+      results.forEach((r: any) => {
+        const key = r.ListingKey || r.Id;
+        if (key) sparkActiveKeys.add(key);
+      });
 
-      skipToken = data?.D?.Pagination?.['@odata.nextLink']
-        ? new URL(data.D.Pagination['@odata.nextLink']).searchParams.get('_skiptoken') || ''
-        : '';
+      // End of data: short page = last page
+      if (results.length < SPARK_PAGE_SIZE) break;
+
+      // Next skiptoken = last result's Id (Spark's actual cursor format)
+      const lastResult = results[results.length - 1];
+      skipToken = lastResult?.Id || lastResult?.ListingKey || '';
       if (!skipToken) break;
       page++;
     }
