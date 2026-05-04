@@ -70,16 +70,34 @@ serve(async (req) => {
     // heuristic. If we end up with fewer keys than TotalRows, the loop
     // terminated early and we fail closed (refuse to purge).
     const sparkActiveKeys = new Set<string>();
-    const pageDiag: Array<{ page: number; results: number; totalRows: number; tookMs: number }> = [];
+    const pageDiag: Array<{ page: number; results: number; totalRows: number; tookMs: number; pagination?: any; firstResultKeys?: string[]; usedSkipToken?: string }> = [];
     let skipToken = '';
     let page = 0;
     let firstPageTotalRows = 0;
 
+    // Default filter is `MlsStatus Eq 'Active'` (no PropertyType) because
+    // testing showed Spark's PropertyType=A filter is unstable in our
+    // integration — same query returns 12k / 6k / 3k on consecutive sessions
+    // (probably the filter being applied after a server-side cursor cache).
+    // The bare MlsStatus filter is consistently 20k+ stable across runs.
+    //
+    // Using the broader reference set is fine because we only DELETE local
+    // listings whose key is NOT in the Spark active set. Our residential-
+    // only DB plus commercial/land in the broader set just means we never
+    // wrongly drop a residential listing that Spark doesn't classify as 'A'.
+    //
+    // includePropertyFilter and useFullSelect kept as debug toggles.
+    const includePropertyFilter = body?.includePropertyFilter === true;   // default false
+    const useFullSelect = body?.useFullSelect === true;                   // default false (lighter payload)
+    const filterClause = includePropertyFilter
+      ? "MlsStatus Eq 'Active' And PropertyType Eq 'A'"
+      : "MlsStatus Eq 'Active'";
+
     while (page < MAX_SPARK_PAGES) {
-      const url = `${SPARK_API_BASE}/listings?_limit=${SPARK_PAGE_SIZE}` +
-        `&_filter=${encodeURIComponent("MlsStatus Eq 'Active'")}` +
-        `&_select=ListingKey,Id` +
-        (skipToken ? `&_skiptoken=${skipToken}` : '');
+      let url = `${SPARK_API_BASE}/listings?_limit=${SPARK_PAGE_SIZE}` +
+        `&_filter=${encodeURIComponent(filterClause)}`;
+      if (!useFullSelect) url += `&_select=ListingKey,Id`;
+      if (skipToken) url += `&_skiptoken=${skipToken}`;
 
       const t0 = Date.now();
       const res = await fetch(url, {
@@ -88,15 +106,48 @@ serve(async (req) => {
       const tookMs = Date.now() - t0;
       if (!res.ok) {
         console.error(`[checkInactiveListings] Spark page ${page} HTTP ${res.status} after ${tookMs}ms`);
+        pageDiag.push({ page, results: 0, totalRows: 0, tookMs, pagination: { httpStatus: res.status } });
         break;
       }
 
       const data = await res.json();
       const results = data?.D?.Results || [];
-      const totalRows = data?.D?.Pagination?.TotalRows ?? 0;
+      const pagination = data?.D?.Pagination;
+      const totalRows = pagination?.TotalRows ?? 0;
       if (page === 0) firstPageTotalRows = totalRows;
 
-      pageDiag.push({ page, results: results.length, totalRows, tookMs });
+      // On page 0 only, capture a FULL sample so we can see exactly which
+      // field is the listing key. Trim the StandardFields blob to keep
+      // response size manageable.
+      let firstResultSample: any = undefined;
+      if (page === 0 && results[0]) {
+        const sample = { ...results[0] };
+        if (sample.StandardFields) {
+          // Keep only key-identifier fields from StandardFields, drop the rest
+          const sf = sample.StandardFields;
+          sample.StandardFields = {
+            Id: sf.Id,
+            ListingKey: sf.ListingKey,
+            ListingId: sf.ListingId,
+            MlsId: sf.MlsId,
+            MlsStatus: sf.MlsStatus,
+            UnparsedAddress: sf.UnparsedAddress,
+            ListingKeyNumeric: sf.ListingKeyNumeric,
+          };
+        }
+        firstResultSample = sample;
+      }
+
+      pageDiag.push({
+        page,
+        results: results.length,
+        totalRows,
+        tookMs,
+        pagination,
+        firstResultKeys: results[0] ? Object.keys(results[0]) : undefined,
+        firstResultSample,
+        usedSkipToken: skipToken ? skipToken.substring(0, 25) + '...' : '(none)',
+      });
 
       if (results.length === 0) break;
 
@@ -116,26 +167,62 @@ serve(async (req) => {
     }
     console.log(`[checkInactiveListings] fetched ${sparkActiveKeys.size} Spark active listings (TotalRows reported: ${firstPageTotalRows}) across ${page + 1} pages`);
 
-    // Truth check: if Spark's reported TotalRows is meaningfully larger than
-    // what we captured, our pagination dropped pages. Refuse to purge.
-    if (firstPageTotalRows > 0 && sparkActiveKeys.size < firstPageTotalRows * 0.95) {
-      const msg = `Pagination incomplete: captured ${sparkActiveKeys.size} of ${firstPageTotalRows} Spark active listings (${Math.round(100 * sparkActiveKeys.size / firstPageTotalRows)}%). Refusing to purge.`;
+    // ─── Stability checks before any deletion ─────────────────────────────
+    // Run after both fetches complete; any failure aborts with diagnostics.
+    // These exist because Spark's pagination has been observed misbehaving
+    // (truncating mid-stream, returning inconsistent counts on consecutive
+    // calls). TotalRows is unreliable for our query shape (always 0), so
+    // we use structural checks on the page sequence instead.
+    const lastPage = pageDiag[pageDiag.length - 1];
+    const totalFetched = pageDiag.reduce((s, p) => s + p.results, 0);
+
+    const safetyChecks: Array<{ name: string; ok: boolean; detail: string }> = [
+      {
+        name: 'pagination_terminated',
+        ok: !!lastPage && lastPage.results < SPARK_PAGE_SIZE && lastPage.results > 0,
+        detail: `last page returned ${lastPage?.results} rows (must be 1..${SPARK_PAGE_SIZE - 1} to confirm we hit end-of-data, not a transient empty/full page)`,
+      },
+      {
+        name: 'multiple_pages_fetched',
+        ok: pageDiag.length >= 2,
+        detail: `fetched ${pageDiag.length} pages (must be >=2 — single-page result suggests early termination)`,
+      },
+      {
+        name: 'no_zero_pages_mid_stream',
+        ok: pageDiag.slice(0, -1).every(p => p.results > 0),
+        detail: `${pageDiag.filter(p => p.results === 0).length} mid-stream pages had 0 results`,
+      },
+      {
+        name: 'low_duplicate_rate',
+        ok: totalFetched > 0 && sparkActiveKeys.size / totalFetched > 0.85,
+        detail: `unique/fetched ratio: ${totalFetched > 0 ? (sparkActiveKeys.size / totalFetched).toFixed(3) : '0'} (must be >0.85 — high dup rate means cursor revisiting)`,
+      },
+      {
+        name: 'minimum_active_set',
+        ok: sparkActiveKeys.size >= 5000,
+        detail: `Spark returned ${sparkActiveKeys.size} active listings (must be >=5000 — Phoenix MLS active count is consistently >10k)`,
+      },
+      {
+        name: 'reasonable_purge_size',
+        ok: localKeys.size === 0 || ([...localKeys].filter(k => !sparkActiveKeys.has(k)).length / localKeys.size) < 0.80,
+        detail: `would purge ${[...localKeys].filter(k => !sparkActiveKeys.has(k)).length} of ${localKeys.size} local rows — must be <80% (anything more suggests Spark side is broken)`,
+      },
+    ];
+
+    const failedChecks = safetyChecks.filter(c => !c.ok);
+    if (failedChecks.length > 0) {
+      const msg = `Refusing to purge — ${failedChecks.length} safety check(s) failed: ${failedChecks.map(c => c.name).join(', ')}`;
       console.error(`[checkInactiveListings] ABORT — ${msg}`);
       return jsonResponse({
         success: false,
         local: localKeys.size,
         spark_active: sparkActiveKeys.size,
-        spark_total_rows: firstPageTotalRows,
         purged: 0,
         page_diagnostics: pageDiag,
+        safety_checks: safetyChecks,
         message: msg,
       }, 500);
     }
-
-    // (Old MIN_EXPECTED_SPARK_ACTIVE absolute floor removed — replaced by the
-    // TotalRows-relative check above, which is more accurate. Spark returns
-    // its own count of how many active listings actually exist, so we don't
-    // need to guess a floor.)
 
     // ─── Step 3: Find local listings NOT in Spark's active set, delete ───
     const staleKeys = [...localKeys].filter(k => !sparkActiveKeys.has(k));
@@ -156,12 +243,14 @@ serve(async (req) => {
     return jsonResponse({
       success: true,
       dry_run: dryRun,
+      filter: filterClause,
       local: localKeys.size,
       spark_active: sparkActiveKeys.size,
-      spark_total_rows: firstPageTotalRows,
       stale_in_local: staleKeys.length,
       purged,
-      page_diagnostics: pageDiag,
+      pages: pageDiag.length,
+      total_fetched: pageDiag.reduce((s, p) => s + p.results, 0),
+      safety_checks: safetyChecks.map(c => ({ name: c.name, ok: c.ok })),
       message: dryRun
         ? `DRY RUN: would have removed ${staleKeys.length} non-active listings`
         : `Removed ${purged} non-active listings from database`,
