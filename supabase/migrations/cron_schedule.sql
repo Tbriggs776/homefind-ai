@@ -111,7 +111,7 @@ DO $cron$ BEGIN
           'Content-Type', 'application/json',
           'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
         ),
-        body := '{"confirmDelete": true}'::jsonb
+        body := '{}'::jsonb
       );
     $cmd$
   );

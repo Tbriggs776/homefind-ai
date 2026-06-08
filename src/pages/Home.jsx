@@ -34,14 +34,12 @@ export default function Home() {
       try {
         const TANNER_AGENT_ID = 'pc295';
 
-        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
         const primaryResult = await supabase
           .from('properties')
           .select('*')
           .in('status', ['active', 'coming_soon'])
           .not('latitude', 'is', null)
           .not('longitude', 'is', null)
-          .gte('last_synced_at', threeDaysAgo)
           .eq('list_agent_mls_id', TANNER_AGENT_ID)
           .order('created_at', { ascending: false })
           .limit(8);
