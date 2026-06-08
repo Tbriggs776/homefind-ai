@@ -18,8 +18,16 @@
 -- =============================================================================
 
 -- ─── 1. spark-sync-incremental — every 10 min ──────────────────────────────
--- Public properties table sync. Pulls Spark Replication API delta since the
--- cursor in sync_cache.spark_sync_cursor and upserts changed rows.
+-- Public properties table sync via the RESO Web API (syncListingsReso). Pulls
+-- everything modified in the window since the last run (NO status filter), then
+-- upserts the ones that are Active and DELETES the ones that flipped to
+-- Closed/Cancelled/Pending. This is what keeps the table active-only WITHOUT a
+-- full 38k scan — departures self-heal within ~10 min.
+--
+-- Replaces the legacy syncSparkApiListings (/v1 _skiptoken), which (a) filtered
+-- to Active-only so it never saw departures, and (b) truncated at random because
+-- it built the pagination cursor from each record's Id. See syncListingsReso
+-- header and checkInactiveListings header for the full diagnosis.
 DO $cron$ BEGIN
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'spark-sync-incremental') THEN
     PERFORM cron.unschedule('spark-sync-incremental');
@@ -29,12 +37,12 @@ DO $cron$ BEGIN
     '*/10 * * * *',
     $cmd$
       SELECT net.http_post(
-        url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/syncSparkApiListings',
+        url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/syncListingsReso',
         headers := jsonb_build_object(
           'Content-Type', 'application/json',
           'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
         ),
-        body := '{"full_sync": false}'::jsonb
+        body := '{"mode": "incremental"}'::jsonb
       );
     $cmd$
   );
@@ -95,8 +103,11 @@ DO $cron$ BEGIN
 END $cron$;
 
 -- ─── 4. purge-stale-listings — daily 10:00 UTC (3am AZ) ────────────────────
--- Calls Spark API for each Active row in our DB and reconciles status. Marks
--- listings as Closed/Pending/Withdrawn if their MLS state changed.
+-- Daily backstop reconciliation. checkInactiveListings now fetches the COMPLETE
+-- active set from the RESO Web API (@odata.nextLink) and refuses to delete
+-- unless it retrieved >=99% of Spark's @odata.count — so a flaky scan can no
+-- longer mass-delete live listings (the historical failure mode). confirmDelete
+-- is therefore safe to enable: the completeness gate is the safety mechanism.
 DO $cron$ BEGIN
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'purge-stale-listings') THEN
     PERFORM cron.unschedule('purge-stale-listings');
@@ -111,7 +122,7 @@ DO $cron$ BEGIN
           'Content-Type', 'application/json',
           'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
         ),
-        body := '{}'::jsonb
+        body := '{"confirmDelete": true}'::jsonb
       );
     $cmd$
   );
