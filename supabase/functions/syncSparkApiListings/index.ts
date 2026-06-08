@@ -151,6 +151,7 @@ function buildRow(listing: any) {
     listing_source: 'flexmls_idx',
     status: mapStatus(mlsStatus),
     mls_status: mlsStatus,
+    last_synced_at: new Date().toISOString(),
     address, city: d.City || d.PostalCity || '', state: d.StateOrProvince || 'AZ',
     zip_code: d.PostalCode || '', county: d.CountyOrParish || '',
     subdivision: d.SubdivisionName || '', cross_street: d.CrossStreet || '',

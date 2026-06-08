@@ -172,6 +172,7 @@ function buildPropertyData(listing, externalId) {
         images: photos,
         virtual_tour_url: virtualTourUrl,
         status: mapStatus(data.MlsStatus),
+        last_synced_at: new Date().toISOString(),
         days_on_market: parseInt(data.CumulativeDaysOnMarket || data.DaysOnMarket || 0),
         mls_number: String(data.ListingId || externalId),
         garage_spaces: parseInt(data.GarageSpaces) || 0,

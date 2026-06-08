@@ -34,19 +34,17 @@ export default function RecentlyViewed({ user, onFavorite, savedPropertyIds = []
         // Get unique property IDs (most recent first)
         const uniquePropertyIds = [...new Set(views.map(v => v.property_id))].slice(0, 6);
 
-        // Fetch the actual properties
-        const { data: allProperties, error: propsError } = await supabase
+        // Fetch only the viewed properties, filtered to active/coming_soon
+        const { data: viewedProperties, error: propsError } = await supabase
           .from('properties')
           .select('*')
-          .order('created_at', { ascending: false })
-          .limit(2000);
+          .in('id', uniquePropertyIds)
+          .in('status', ['active', 'coming_soon']);
 
         if (propsError) throw propsError;
 
-        const viewedProperties = allProperties.filter(p => uniquePropertyIds.includes(p.id));
-
         // Sort by the order they appear in uniquePropertyIds (most recent first)
-        const sorted = uniquePropertyIds.map(id => viewedProperties.find(p => p.id === id)).filter(Boolean);
+        const sorted = uniquePropertyIds.map(id => (viewedProperties || []).find(p => p.id === id)).filter(Boolean);
         setProperties(sorted);
       } catch (error) {
         console.error('Error fetching recently viewed:', error);
