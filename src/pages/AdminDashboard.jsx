@@ -145,7 +145,8 @@ export default function AdminDashboard() {
     setSyncing(true);
     setSyncResults(null);
     try {
-      const data = await invokeFunction('syncSparkApiListings', {});
+      // RESO incremental sync (replaces the retired legacy syncSparkApiListings).
+      const data = await invokeFunction('syncListingsReso', { mode: 'incremental' });
       setSyncResults(data);
     } catch (error) {
       setSyncResults({ error: error.message });
