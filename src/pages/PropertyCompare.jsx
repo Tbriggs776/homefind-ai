@@ -29,7 +29,12 @@ export default function PropertyCompare() {
     queryKey: ['properties-compare', propertyIds],
     queryFn: async () => {
       if (propertyIds.length === 0) return [];
-      const { data } = await supabase.from('properties').select('*').in('id', propertyIds);
+      // Only compare active/coming_soon listings (guards against stale ids in URL)
+      const { data } = await supabase
+        .from('properties')
+        .select('*')
+        .in('id', propertyIds)
+        .in('status', ['active', 'coming_soon']);
       return data || [];
     },
     enabled: propertyIds.length > 0

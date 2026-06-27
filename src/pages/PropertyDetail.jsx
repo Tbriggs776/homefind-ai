@@ -77,11 +77,15 @@ export default function PropertyDetail() {
   const { data: property, isLoading } = useQuery({
     queryKey: ['property', propertyId],
     queryFn: async () => {
+      // Only active/coming_soon are displayable (ARMLS IDX). A sold/cancelled
+      // listing (or a stale deep link) returns null → the "Property not found"
+      // guard below renders instead of showing an inactive listing as live.
       const { data, error } = await supabase
         .from('properties')
         .select('*')
         .eq('id', propertyId)
-        .single();
+        .in('status', ['active', 'coming_soon'])
+        .maybeSingle();
       if (error) throw error;
       return data;
     },

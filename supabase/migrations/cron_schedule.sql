@@ -58,7 +58,7 @@ DO $cron$ BEGIN
   END IF;
   PERFORM cron.schedule(
     'spark-sync-internal',
-    '*/2 * * * *',
+    '*/15 * * * *',
     $cmd$
       SELECT net.http_post(
         url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/syncSparkInternalListings',
@@ -72,34 +72,17 @@ DO $cron$ BEGIN
   );
 END $cron$;
 
--- ─── 3. refresh-spark-token — every 30 min ─────────────────────────────────
--- WARNING: BROKEN — DO NOT TRUST.
--- The refreshSparkToken function calls a non-existent OAuth endpoint
--- (sparkplatform.com/v1/oauth2/grant returns 404 — Spark's actual API host
--- is sparkapi.com). Even if fixed, the function writes to sync_cache.spark_tokens
--- but syncSparkApiListings reads its token from the SPARK_OAUTH_ACCESS_TOKEN
--- env var, so refreshes are no-ops. Captured here for state parity only —
--- replace or unschedule once we decide whether token rotation is actually needed.
--- (The existing env-var token has been valid for weeks, suggesting Spark issues
--- long-lived tokens for this integration tier and rotation may be unnecessary.)
+-- ─── 3. refresh-spark-token — RETIRED ──────────────────────────────────────
+-- The refreshSparkToken function called a non-existent OAuth endpoint
+-- (sparkplatform.com/v1/oauth2/grant → 404; Spark's host is sparkapi.com) and
+-- wrote to sync_cache.spark_tokens, which nothing reads (the sync functions take
+-- their token from the SPARK_OAUTH_ACCESS_TOKEN env var). It 404'd every 30 min
+-- for months. Unscheduled — do NOT recreate. If token rotation is ever needed,
+-- build it against sparkapi.com and have the sync read the rotated token.
 DO $cron$ BEGIN
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'refresh-spark-token') THEN
     PERFORM cron.unschedule('refresh-spark-token');
   END IF;
-  PERFORM cron.schedule(
-    'refresh-spark-token',
-    '*/30 * * * *',
-    $cmd$
-      SELECT net.http_post(
-        url := 'https://bfnudxyxgjhdqwlcqyar.supabase.co/functions/v1/refreshSparkToken',
-        headers := jsonb_build_object(
-          'Content-Type', 'application/json',
-          'Authorization', concat('Bearer ', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1))
-        ),
-        body := '{}'::jsonb
-      );
-    $cmd$
-  );
 END $cron$;
 
 -- ─── 4. purge-stale-listings — daily 10:00 UTC (3am AZ) ────────────────────

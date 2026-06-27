@@ -226,17 +226,45 @@ serve(async (req) => {
 
     let url: string;
     if (mode === 'incremental') {
-      // Window from last completed full/incremental run → now. NO status filter,
-      // so departures (Active→Closed/Cancelled/Pending) are included.
+      // Process everything modified in a window (NO status filter), upserting
+      // Actives and DELETING departures (Active→Closed/Cancelled/Pending).
+      //
+      // CHECKPOINTING (this is what makes an outage self-heal):
+      //   - A window has a fixed [since, until]. We persist the @odata.nextLink
+      //     for the window so a run that hits the time budget RESUMES mid-window
+      //     instead of restarting from the front (the old bug that starved new
+      //     listings after the 19-day outage).
+      //   - last_completed only advances to `until` when the window is fully
+      //     drained (no nextLink).
+      //   - New windows are CAPPED to MAX_WINDOW_MS so a large backlog is walked
+      //     forward in bounded, completable chunks rather than one ever-growing
+      //     window that never finishes.
       const cur = await loadCursor();
-      const since = body.since || cur.last_completed || new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const until = new Date().toISOString();
-      const filter = `ModificationTimestamp gt ${since} and ModificationTimestamp lt ${until}`;
-      url = `${RESO}?$count=true&$top=${RESO_TOP}&$expand=Media&$filter=${encodeURIComponent(filter)}`;
+      const OVERLAP_MS = 5 * 60 * 1000;       // 5-min overlap; upserts/deletes are idempotent
+      const MAX_WINDOW_MS = 2 * 24 * 60 * 60 * 1000; // 2-day chunks when catching up
+
+      let nextUrl: string | null;
+      let since: string;
+      let until: string;
+      if (cur.inc_next) {
+        // resume an in-progress window
+        nextUrl = cur.inc_next;
+        since = cur.inc_since;
+        until = cur.inc_until;
+      } else {
+        const sinceMs = body.since
+          ? Date.parse(body.since)
+          : (cur.last_completed ? Date.parse(cur.last_completed) - OVERLAP_MS : Date.now() - 2 * 60 * 60 * 1000);
+        const untilMs = Math.min(Date.now(), sinceMs + MAX_WINDOW_MS);
+        since = new Date(sinceMs).toISOString();
+        until = new Date(untilMs).toISOString();
+        const filter = `ModificationTimestamp gt ${since} and ModificationTimestamp lt ${until}`;
+        nextUrl = `${RESO}?$count=true&$top=${RESO_TOP}&$expand=Media&$filter=${encodeURIComponent(filter)}`;
+      }
+
       const upserts: any[] = [];
       const deletes: string[] = [];
       let odataCount: number | null = null;
-      let nextUrl: string | null = url;
       let pages = 0;
       while (nextUrl && (Date.now() - start) < TIME_BUDGET_MS) {
         const res = await fetch(nextUrl, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
@@ -260,9 +288,22 @@ serve(async (req) => {
         const { error } = await supabaseAdmin.from('properties').delete().in('listing_key', deletes.slice(i, i + 500));
         if (!error) deleted += Math.min(500, deletes.length - i);
       }
-      const complete = !nextUrl;
-      if (complete) await saveCursor({ ...(await loadCursor()), last_completed: until });
-      return jsonResponse({ success: true, mode, odata_count: odataCount, upserted: upserts.length, deleted, pages, complete });
+
+      const windowComplete = !nextUrl;
+      const caughtUp = windowComplete && Date.parse(until) >= Date.now() - OVERLAP_MS;
+      // Persist checkpoint: keep window state if mid-window, else advance last_completed.
+      await saveCursor({
+        ...cur,
+        inc_next: windowComplete ? '' : nextUrl,
+        inc_since: windowComplete ? '' : since,
+        inc_until: windowComplete ? '' : until,
+        last_completed: windowComplete ? until : cur.last_completed,
+      });
+      return jsonResponse({
+        success: true, mode, window: { since, until }, odata_count: odataCount,
+        upserted: upserts.length, deleted, pages,
+        window_complete: windowComplete, caught_up: caughtUp,
+      });
     }
 
     // ── full mode ──
@@ -306,6 +347,7 @@ serve(async (req) => {
     totalSoFar += synced;
     const complete = !nextUrl;
     await saveCursor({
+      ...cur, // preserve inc_* checkpoint fields so full/incremental don't clobber
       full_next: complete ? '' : nextUrl,
       full_synced: complete ? 0 : totalSoFar,
       last_completed: complete ? new Date().toISOString() : (cur.last_completed || null),
