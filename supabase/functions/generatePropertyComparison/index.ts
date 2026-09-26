@@ -1,11 +1,15 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { supabaseAdmin, corsHeaders, jsonResponse, requireUser } from '../_shared/supabaseAdmin.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { propertyIds, userId } = await req.json();
+    // Signed-in users only: this calls a paid LLM API.
+    const { user, error } = await requireUser(req);
+    if (error) return error;
+    const userId = user.id;
+    const { propertyIds } = await req.json();
     if (!propertyIds?.length || propertyIds.length < 2) throw new Error('At least 2 propertyIds required');
 
     const openaiKey = Deno.env.get('OPENAI_API_KEY');

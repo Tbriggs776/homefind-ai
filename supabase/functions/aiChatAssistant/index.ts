@@ -1,11 +1,15 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { supabaseAdmin, corsHeaders } from '../_shared/supabaseAdmin.ts';
+import { supabaseAdmin, corsHeaders, requireUser } from '../_shared/supabaseAdmin.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { message, userId, conversationHistory = [] } = await req.json();
+    // Signed-in users only: this calls a paid LLM API.
+    const { user, error } = await requireUser(req);
+    if (error) return error;
+    const userId = user.id;
+    const { message, conversationHistory = [] } = await req.json();
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openaiKey) throw new Error('OPENAI_API_KEY not set');
 
@@ -88,8 +92,8 @@ Only include the JSON block if the user is explicitly searching for properties. 
     // Strip the JSON block from the user-facing reply
     const reply = rawReply.replace(/```json\n?[\s\S]*?\n?```/g, '').trim();
 
-    // Save chat message if userId provided
-    if (userId) {
+    // Save the exchange for the signed-in user
+    {
       await supabaseAdmin.from('chat_messages').insert([
         { user_id: userId, role: 'user', content: message },
         { user_id: userId, role: 'assistant', content: reply, metadata: filters ? { filters } : null },

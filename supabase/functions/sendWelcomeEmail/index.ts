@@ -1,11 +1,27 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { supabaseAdmin, corsHeaders, jsonResponse, requireUser } from '../_shared/supabaseAdmin.ts';
+
+// Home calls this on every visit; only accounts this new get the email, so
+// turning the function on doesn't mail every existing user at once.
+const NEW_ACCOUNT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { userId, email, name } = await req.json();
+    const { user, error } = await requireUser(req);
+    if (error) return error;
+    if (user.welcome_email_sent) return jsonResponse({ success: true, skipped: 'already sent' });
+    if (!user.created_at || Date.now() - new Date(user.created_at).getTime() > NEW_ACCOUNT_WINDOW_MS) {
+      return jsonResponse({ success: true, skipped: 'not a new account' });
+    }
+    const userId = user.id;
+    const email = user.email;
+    const name = user.full_name;
     const resendKey = Deno.env.get('RESEND_API_KEY');
 
     if (!resendKey) {
@@ -13,7 +29,7 @@ serve(async (req) => {
       return jsonResponse({ success: true, skipped: true, reason: 'No email provider configured' });
     }
 
-    const firstName = name?.split(' ')[0] || 'there';
+    const firstName = escapeHtml(name?.split(' ')[0] || 'there');
 
     const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',

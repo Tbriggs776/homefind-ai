@@ -1,9 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { supabaseAdmin, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { supabaseAdmin, corsHeaders, jsonResponse, requireAdmin } from '../_shared/supabaseAdmin.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
+    const { error: authError } = await requireAdmin(req);
+    if (authError) return authError;
+
     const fubKey = Deno.env.get('FOLLOW_UP_BOSS_API_KEY');
     if (!fubKey) throw new Error('FOLLOW_UP_BOSS_API_KEY not set');
 

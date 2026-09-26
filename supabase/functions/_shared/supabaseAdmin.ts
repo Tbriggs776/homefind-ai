@@ -33,6 +33,27 @@ export async function getUser(req: Request) {
   return profile ? { ...profile, auth_id: user.id } : null;
 }
 
+// Full admins and user-admins (the team). Matches the frontend's isAdmin.
+export function isAdminProfile(profile: { role?: string; is_user_admin?: boolean } | null | undefined) {
+  return profile?.role === 'admin' || profile?.is_user_admin === true;
+}
+
+// Resolve the signed-in caller or produce a 401. The public anon key is not
+// a user session, so getUser() returns null for it.
+export async function requireUser(req: Request) {
+  const user = await getUser(req);
+  return user
+    ? { user, error: null }
+    : { user: null, error: jsonResponse({ error: 'Please sign in' }, 401) };
+}
+
+export async function requireAdmin(req: Request) {
+  const user = await getUser(req);
+  if (!user) return { user: null, error: jsonResponse({ error: 'Please sign in' }, 401) };
+  if (!isAdminProfile(user)) return { user: null, error: jsonResponse({ error: 'Admin access required' }, 403) };
+  return { user, error: null };
+}
+
 // Convenience: direct admin client export
 export const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',

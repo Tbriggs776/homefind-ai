@@ -1,4 +1,4 @@
-import { getServiceClient, getUser, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
+import { getServiceClient, getUser, isAdminProfile, corsHeaders, jsonResponse } from '../_shared/supabaseAdmin.ts';
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -13,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     // Admin only
     const user = await getUser(req);
-    if (!user || !user.is_admin) {
+    if (!user || !isAdminProfile(user)) {
       return jsonResponse({ error: 'Admin access required' }, 403);
     }
 

@@ -1,31 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { supabaseAdmin, corsHeaders } from '../_shared/supabaseAdmin.ts';
-
-const ANON_KEY_PREFIX = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI';
+import { supabaseAdmin, corsHeaders, getUser } from '../_shared/supabaseAdmin.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    let userId: string | null = null;
-
-    // Try 1: Get userId from JWT in Authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (authHeader && !authHeader.includes(ANON_KEY_PREFIX)) {
-      const token = authHeader.replace('Bearer ', '');
-      try {
-        const { data: { user } } = await supabaseAdmin.auth.getUser(token);
-        if (user) userId = user.id;
-      } catch (_) { /* fall through */ }
-    }
-
-    // Try 2: Get userId from request body
-    if (!userId) {
-      try {
-        const body = await req.json().catch(() => ({}));
-        if (body.userId) userId = body.userId;
-      } catch (_) { /* ignore */ }
-    }
+    // Identity comes from the session only — never from the request body.
+    const userId = (await getUser(req))?.id ?? null;
 
     // No user — return empty recommendations (graceful fallback)
     if (!userId) {
