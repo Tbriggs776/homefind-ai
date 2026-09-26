@@ -200,7 +200,7 @@ function buildRow(rec: any) {
     listing_agent_phone: d.ListAgentDirectPhone || d.ListAgentOfficePhone || d.ListAgentPreferredPhone || '',
     listing_agent_mls_id: d.ListAgentMlsId || '',
     is_featured: agentId === TANNER_ID || coAgentId === TANNER_ID,
-    open_house_date: null, open_house_end: null, open_house_remarks: null,
+    // open_house_* are owned by syncOpenHouses; omitted here so upserts don't wipe them.
   };
 }
 

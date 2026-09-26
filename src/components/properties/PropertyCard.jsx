@@ -8,6 +8,7 @@ import { createPageUrl } from '@/utils';
 import LoginGateModal from '@/components/LoginGateModal';
 import ShareButton from '@/components/properties/ShareButton';
 import { listingPhotoProps, preloadPhotos, PHOTO_PLACEHOLDER, HIGH_FETCH_PRIORITY } from '@/lib/listingPhotos';
+import { getPriceCut, getOpenHouse } from '@/lib/listingBadges';
 
 // Cards render 1-up on phones, 2-up from sm, 3-up from lg.
 const CARD_SIZES = '(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw';
@@ -31,6 +32,9 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
 
   // Days on market styling. <= 7 days gets a "New" badge in green
   // (Zillow/Redfin pattern), 8-30 is neutral, >30 is muted.
+  const priceCut = getPriceCut(property);
+  const openHouse = getOpenHouse(property);
+
   const dom = property.days_on_market;
   const isNewListing = dom > 0 && dom <= 7;
 
@@ -98,9 +102,14 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
               {property.is_featured && (
                 <Badge className="bg-primary text-primary-foreground border-0">Featured</Badge>
               )}
-              {property.original_list_price && property.original_list_price > property.price && (
+              {priceCut && (
                 <Badge className="bg-red-600 text-white border-0 flex items-center gap-1">
-                  <TrendingDown className="h-3 w-3" /> Price Reduced
+                  <TrendingDown className="h-3 w-3" /> {priceCut.label}
+                </Badge>
+              )}
+              {openHouse && (
+                <Badge className="bg-secondary text-secondary-foreground border-0">
+                  {openHouse.short}
                 </Badge>
               )}
               {property.virtual_tour_url && (

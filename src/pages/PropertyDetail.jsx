@@ -13,7 +13,7 @@ import {
   ArrowLeft, Heart, Bed, Bath, Square, MapPin,
   Calendar, Loader2, ChevronLeft, ChevronRight, X, Expand,
   TrendingDown, Video, DollarSign, GraduationCap, Eye,
-  Phone, MessageCircle, CalendarCheck
+  Phone, MessageCircle, CalendarCheck, LayoutGrid, Clock, CalendarDays
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -22,13 +22,20 @@ import LoginGateModal from '../components/LoginGateModal';
 import ShareButton from '../components/properties/ShareButton';
 import PropertyCard from '../components/properties/PropertyCard';
 import PropertyDetailSkeleton from '../components/properties/PropertyDetailSkeleton';
-import { listingPhotoProps, preloadPhotos, PHOTO_PLACEHOLDER, HIGH_FETCH_PRIORITY } from '@/lib/listingPhotos';
+import { listingPhotoProps, preloadPhotos, sparkPhoto, PHOTO_PLACEHOLDER, HIGH_FETCH_PRIORITY } from '@/lib/listingPhotos';
+import { getAmenities, getPriceCut, getOpenHouse, getListedLabel } from '@/lib/listingBadges';
 
 // ============================================================================
 // MORTGAGE PAYMENT CALCULATION
 // ----------------------------------------------------------------------------
 // Standard amortization formula:  M = P × [r(1+r)^n] / [(1+r)^n - 1]
 // Where P = principal, r = monthly rate, n = number of payments.
+// Private mortgage insurance, typically required on conventional loans with
+// under 20% down. ~0.5%/yr of the loan amount is a middle-of-the-road
+// estimate (real quotes run ~0.3–1.5% depending on credit score).
+const PMI_ANNUAL_RATE = 0.005;
+const FALLBACK_RATE = 6.5;
+
 // Returns monthly P&I (principal + interest) only — taxes, HOA, insurance
 // are added separately by the calling component.
 // ============================================================================
@@ -87,6 +94,9 @@ export default function PropertyDetail() {
   const [imagesViewed, setImagesViewed] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showGrid, setShowGrid] = useState(false);
+  // Once the buyer moves the rate slider, stop overwriting it with live rates.
+  const [rateTouched, setRateTouched] = useState(false);
   const [touchStart, setTouchStart] = useState(0);
   const [touchEnd, setTouchEnd] = useState(0);
   const [showLoginGate, setShowLoginGate] = useState(false);
@@ -100,7 +110,7 @@ export default function PropertyDetail() {
   // sliders/buttons in the calculator card on the right sidebar.
   const [downPaymentPct, setDownPaymentPct] = useState(20);
   const [loanTermYears, setLoanTermYears] = useState(30);
-  const [interestRate, setInterestRate] = useState(6.5);
+  const [interestRate, setInterestRate] = useState(FALLBACK_RATE);
 
   const urlParams = new URLSearchParams(window.location.search);
   const propertyId = urlParams.get('id');
@@ -133,6 +143,35 @@ export default function PropertyDetail() {
   // listings. Cached by property ID so navigating between properties refetches
   // automatically.
   // ============================================================================
+  // Price changes we've recorded (the MLS feed has no price history).
+  const { data: priceHistory = [] } = useQuery({
+    queryKey: ['priceHistory', propertyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('property_price_history')
+        .select('old_price, new_price, changed_at')
+        .eq('property_id', propertyId)
+        .order('changed_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!propertyId,
+    staleTime: 5 * 60_000,
+  });
+
+  // Freddie Mac weekly averages (same source as the rate ticker).
+  const { data: liveRates } = useQuery({
+    queryKey: ['mortgageRates'],
+    queryFn: () => invokeFunction('getMortgageRates', {}),
+    staleTime: 12 * 60 * 60_000,
+    retry: 1,
+  });
+  const liveRateForTerm = loanTermYears === 15 ? liveRates?.fifteen_year_fixed : liveRates?.thirty_year_fixed;
+  useEffect(() => {
+    if (!rateTouched && typeof liveRateForTerm === 'number') setInterestRate(liveRateForTerm);
+  }, [liveRateForTerm, rateTouched]);
+
   const { data: similarHomes = [] } = useQuery({
     queryKey: ['similarHomes', propertyId, property?.city, property?.price, property?.bedrooms],
     queryFn: async () => {
@@ -237,6 +276,13 @@ export default function PropertyDetail() {
     onSuccess: (action) => { setIsSaved(action === 'added'); }
   });
 
+  useEffect(() => {
+    if (!showGrid || isFullscreen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setShowGrid(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showGrid, isFullscreen]);
+
   const images = property?.images?.length > 0
     ? property.images
     : [property?.primary_photo_url || PHOTO_PLACEHOLDER];
@@ -256,13 +302,11 @@ export default function PropertyDetail() {
   };
 
   const handlePrevImage = () => {
-    if (!user) { setShowLoginGate(true); return; }
     const newIndex = currentImageIndex === 0 ? images.length - 1 : currentImageIndex - 1;
     handleImageChange(newIndex);
   };
 
   const handleNextImage = () => {
-    if (!user) { setShowLoginGate(true); return; }
     const newIndex = currentImageIndex === images.length - 1 ? 0 : currentImageIndex + 1;
     handleImageChange(newIndex);
   };
@@ -359,6 +403,10 @@ export default function PropertyDetail() {
   }
 
   const formatPrice = (price) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
+  const priceCut = getPriceCut(property);
+  const openHouse = getOpenHouse(property);
+  const listedLabel = getListedLabel(property);
+  const amenities = getAmenities(property);
 
   return (
     <div className="min-h-screen pb-24 lg:pb-12 bg-background">
@@ -418,7 +466,10 @@ export default function PropertyDetail() {
                     <button type="button" onClick={handleNextImage} aria-label="Next image" className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronRight className="h-6 w-6 text-white" aria-hidden="true" /></button>
                   </>
                 )}
-                <button type="button" onClick={() => user ? setIsFullscreen(true) : setShowLoginGate(true)} aria-label="View image fullscreen" className="absolute top-4 right-4 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><Expand className="h-5 w-5 text-white" aria-hidden="true" /></button>
+                {images.length > 1 && (
+                  <button type="button" onClick={() => setShowGrid(true)} className="absolute bottom-4 left-4 h-9 px-3 bg-white/95 hover:bg-white rounded-full flex items-center gap-2 text-sm font-medium text-foreground shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><LayoutGrid className="h-4 w-4" aria-hidden="true" />View all {images.length} photos</button>
+                )}
+                <button type="button" onClick={() => setIsFullscreen(true)} aria-label="View image fullscreen" className="absolute top-4 right-4 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><Expand className="h-5 w-5 text-white" aria-hidden="true" /></button>
                 {images.length > 1 && (
                   <>
                     <div className="absolute top-4 left-4 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-sm font-medium" aria-live="polite" aria-atomic="true"><span className="sr-only">Image </span>{currentImageIndex + 1} / {images.length}</div>
@@ -449,10 +500,13 @@ export default function PropertyDetail() {
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       <h1 className="text-3xl font-normal text-foreground">{formatPrice(property.price)}</h1>
-                      {property.original_list_price && property.original_list_price > property.price && (
-                        <div className="flex items-center gap-1">
-                          <TrendingDown className="h-4 w-4 text-red-600" />
-                          <span className="text-sm text-red-600 line-through">{formatPrice(property.original_list_price)}</span>
+                      {priceCut && (
+                        <div className="flex items-center gap-1 text-sm text-red-600">
+                          <TrendingDown className="h-4 w-4" aria-hidden="true" />
+                          <span>
+                            <span className="line-through">{formatPrice(property.previous_list_price)}</span>
+                            {' '}−{formatPrice(priceCut.amount)} ({priceCut.percent}%)
+                          </span>
                         </div>
                       )}
                     </div>
@@ -467,6 +521,11 @@ export default function PropertyDetail() {
                       >
                         {property.subdivision} →
                       </Link>
+                    )}
+                    {listedLabel && (
+                      <p className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2 ml-7">
+                        <Clock className="h-3.5 w-3.5" aria-hidden="true" /> {listedLabel}
+                      </p>
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -484,6 +543,16 @@ export default function PropertyDetail() {
                   <div className="text-center"><div className="flex items-center justify-center gap-2 mb-1"><Calendar className="h-5 w-5 text-muted-foreground" /><span className="text-2xl font-bold text-foreground">{property.year_built}</span></div><p className="text-sm text-muted-foreground">Year Built</p></div>
                 </div>
 
+                {openHouse && (
+                  <div className="mt-6 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+                    <CalendarDays className="h-5 w-5 text-primary flex-shrink-0" aria-hidden="true" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Open house</p>
+                      <p className="text-sm text-muted-foreground">{openHouse.long}</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-6">
                   <h2 className="text-xl font-semibold text-foreground mb-3">Description</h2>
                   <p className="text-foreground/80 leading-relaxed">{property.description || 'No description available.'}</p>
@@ -497,11 +566,18 @@ export default function PropertyDetail() {
                   </div>
                 )}
 
-                {property.features?.length > 0 && (
+                {(amenities.length > 0 || property.features?.length > 0) && (
                   <div className="mt-6">
                     <h2 className="text-xl font-semibold text-foreground mb-3">Features</h2>
+                    {amenities.length > 0 && (
+                      <ul className="flex flex-wrap gap-2 mb-4" aria-label="Amenities">
+                        {amenities.map((a) => (
+                          <li key={a} className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">{a}</li>
+                        ))}
+                      </ul>
+                    )}
                     <div className="grid grid-cols-2 gap-3">
-                      {property.features.map((feature, idx) => (
+                      {(property.features ?? []).map((feature, idx) => (
                         <div key={idx} className="flex items-center gap-2 text-foreground/80"><div className="h-1.5 w-1.5 bg-primary rounded-full" /><span>{feature}</span></div>
                       ))}
                     </div>
@@ -529,6 +605,27 @@ export default function PropertyDetail() {
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {priceHistory.length > 0 && (
+                  <div className="mt-6">
+                    <h2 className="text-xl font-semibold text-foreground mb-3">Price history</h2>
+                    <table className="w-full text-sm">
+                      <thead className="sr-only"><tr><th>Date</th><th>Change</th><th>Price</th></tr></thead>
+                      <tbody>
+                        {priceHistory.map((h) => {
+                          const diff = Number(h.new_price) - Number(h.old_price);
+                          return (
+                            <tr key={h.changed_at} className="border-b border-border last:border-0">
+                              <td className="py-2 text-muted-foreground">{new Date(h.changed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                              <td className={`py-2 ${diff < 0 ? 'text-red-600' : 'text-green-700'}`}>{diff < 0 ? 'Price cut' : 'Price increase'} {diff < 0 ? '−' : '+'}{formatPrice(Math.abs(diff))}</td>
+                              <td className="py-2 text-right font-medium text-foreground">{formatPrice(Number(h.new_price))}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
 
@@ -660,8 +757,17 @@ export default function PropertyDetail() {
                   : (property.price * 0.0065) / 12;  // estimate at Maricopa County average
                 const monthlyHoa = normalizeHoaToMonthly(property.hoa_fee, property.hoa_fee_frequency);
                 const monthlyInsurance = (property.price * 0.005) / 12;  // industry rule of thumb for AZ
-                const totalMonthly = monthlyPI + monthlyTax + monthlyHoa + monthlyInsurance;
+                const loanAmount = property.price * (1 - downPaymentPct / 100);
+                const monthlyPmi = downPaymentPct < 20 ? (loanAmount * PMI_ANNUAL_RATE) / 12 : 0;
+                const totalMonthly = monthlyPI + monthlyTax + monthlyHoa + monthlyInsurance + monthlyPmi;
                 const downPaymentAmount = property.price * (downPaymentPct / 100);
+                const breakdown = [
+                  { label: 'Principal & interest', value: monthlyPI, color: 'bg-primary' },
+                  { label: 'Property tax', value: monthlyTax, color: 'bg-secondary', est: !(property.tax_annual_amount > 0) },
+                  { label: 'Home insurance', value: monthlyInsurance, color: 'bg-sky-300', est: true },
+                  { label: 'HOA', value: monthlyHoa, color: 'bg-amber-400' },
+                  { label: 'PMI', value: monthlyPmi, color: 'bg-rose-400', est: true },
+                ].filter((b) => b.value > 0);
 
                 return (
                   <Card className="shadow-md border-border">
@@ -725,44 +831,45 @@ export default function PropertyDetail() {
                           <label className="text-xs text-muted-foreground font-medium">Interest rate</label>
                           <span className="text-xs font-semibold text-foreground">{interestRate.toFixed(3)}%</span>
                         </div>
+                        {!rateTouched && typeof liveRateForTerm === 'number' && (
+                          <p className="text-[11px] text-muted-foreground mb-1">
+                            Freddie Mac {loanTermYears === 15 ? '15' : '30'}-year average{liveRates?.as_of ? ` (week of ${new Date(liveRates.as_of).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}
+                          </p>
+                        )}
                         <input
                           type="range"
                           min="3"
                           max="9"
                           step="0.125"
                           value={interestRate}
-                          onChange={(e) => setInterestRate(Number(e.target.value))}
+                          onChange={(e) => { setRateTouched(true); setInterestRate(Number(e.target.value)); }}
                           className="w-full accent-primary"
                         />
                       </div>
 
-                      {/* Breakdown */}
-                      <div className="space-y-1.5 pt-4 border-t border-border text-sm">
-                        <div className="flex justify-between text-foreground/80">
-                          <span>Principal &amp; interest</span>
-                          <span className="font-medium">{formatPrice(Math.round(monthlyPI))}</span>
+                      {/* Breakdown: stacked bar + legend */}
+                      <div className="pt-4 border-t border-border">
+                        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted mb-3" aria-hidden="true">
+                          {breakdown.map((part) => (
+                            <div key={part.label} className={part.color} style={{ width: `${(part.value / totalMonthly) * 100}%` }} />
+                          ))}
                         </div>
-                        <div className="flex justify-between text-foreground/80">
-                          <span>
-                            Property tax
-                            {!(property.tax_annual_amount > 0) && <span className="text-muted-foreground/60 text-xs ml-1">(est.)</span>}
-                          </span>
-                          <span className="font-medium">{formatPrice(Math.round(monthlyTax))}</span>
-                        </div>
-                        {monthlyHoa > 0 && (
-                          <div className="flex justify-between text-foreground/80">
-                            <span>HOA</span>
-                            <span className="font-medium">{formatPrice(Math.round(monthlyHoa))}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between text-foreground/80">
-                          <span>Home insurance <span className="text-muted-foreground/60 text-xs">(est.)</span></span>
-                          <span className="font-medium">{formatPrice(Math.round(monthlyInsurance))}</span>
-                        </div>
+                        <ul className="space-y-1.5 text-sm">
+                          {breakdown.map((part) => (
+                            <li key={part.label} className="flex items-center justify-between text-foreground/80">
+                              <span className="flex items-center gap-2">
+                                <span className={`h-2.5 w-2.5 rounded-sm ${part.color}`} aria-hidden="true" />
+                                {part.label}
+                                {part.est && <span className="text-muted-foreground/60 text-xs">(est.)</span>}
+                              </span>
+                              <span className="font-medium">{formatPrice(Math.round(part.value))}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
 
                       <p className="text-[10px] text-muted-foreground/60 mt-3 italic">
-                        Estimate only. Doesn't include PMI (typically required if down payment is below 20%). Talk to Tanner for a real quote.
+                        Estimate only. PMI estimated at 0.5% of the loan per year when putting down less than 20%. Talk to Tanner for a real quote.
                       </p>
                     </CardContent>
                   </Card>
@@ -924,7 +1031,7 @@ export default function PropertyDetail() {
       {/* Fullscreen Image Modal */}
       {isFullscreen && (
         <div
-          className="fixed inset-0 z-50 bg-black flex items-center justify-center"
+          className="fixed inset-0 z-[70] bg-black flex items-center justify-center"
           role="dialog"
           aria-modal="true"
           aria-label="Property image fullscreen view"
@@ -936,9 +1043,66 @@ export default function PropertyDetail() {
               <>
                 <button type="button" onClick={handlePrevImage} aria-label="Previous image" className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronLeft className="h-7 w-7 text-white" aria-hidden="true" /></button>
                 <button type="button" onClick={handleNextImage} aria-label="Next image" className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronRight className="h-7 w-7 text-white" aria-hidden="true" /></button>
-                <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white font-medium" aria-live="polite" aria-atomic="true"><span className="sr-only">Image </span>{currentImageIndex + 1} / {images.length}</div>
+                <div className="absolute top-5 left-4 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white font-medium" aria-live="polite" aria-atomic="true"><span className="sr-only">Image </span>{currentImageIndex + 1} / {images.length}</div>
               </>
             )}
+          </div>
+          {images.length > 1 && (
+            <div className="absolute bottom-0 inset-x-0 bg-black/70 px-3 py-2" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+              <div className="flex gap-2 overflow-x-auto scrollbar-none" role="tablist" aria-label="Choose image">
+                {images.map((img, idx) => (
+                  <button
+                    key={img}
+                    type="button"
+                    role="tab"
+                    aria-selected={idx === currentImageIndex}
+                    aria-label={`Image ${idx + 1}`}
+                    onClick={() => handleImageChange(idx)}
+                    ref={idx === currentImageIndex ? (el) => el?.scrollIntoView({ block: 'nearest', inline: 'center' }) : undefined}
+                    className={`flex-shrink-0 h-14 w-20 rounded overflow-hidden border-2 transition-opacity ${idx === currentImageIndex ? 'border-white opacity-100' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                  >
+                    <img src={sparkPhoto(img, 'thumb')} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* All-photos grid */}
+      {showGrid && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto" role="dialog" aria-modal="true" aria-label="All photos">
+          <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-border">
+            <div className="crandell-container flex items-center justify-between py-3">
+              <div className="min-w-0">
+                <p className="font-medium text-foreground truncate">{property.address}, {property.city}</p>
+                <p className="text-sm text-muted-foreground">{images.length} photos</p>
+              </div>
+              <button type="button" onClick={() => setShowGrid(false)} aria-label="Close photos" className="p-2 rounded-md hover:bg-muted">
+                <X className="h-6 w-6" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+          <div className="crandell-container py-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+            {images.map((img, idx) => (
+              <button
+                key={img}
+                type="button"
+                onClick={() => { handleImageChange(idx); setIsFullscreen(true); }}
+                aria-label={`Open image ${idx + 1} of ${images.length}`}
+                className="block aspect-[4/3] overflow-hidden rounded-md bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <img
+                  {...listingPhotoProps(img, 'card', ['thumb', 'card', 'large'])}
+                  sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                  alt={`${property.address}, image ${idx + 1}`}
+                  loading={idx < 6 ? 'eager' : 'lazy'}
+                  decoding="async"
+                  className="h-full w-full object-cover hover:scale-[1.02] transition-transform"
+                />
+              </button>
+            ))}
           </div>
         </div>
       )}
