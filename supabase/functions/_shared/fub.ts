@@ -19,7 +19,8 @@ const RETRY_DELAYS_MIN = [1, 5, 15, 60, 240];
 
 export interface FubEventRow {
   id: number;
-  user_id: string;
+  // null for leads from signed-out visitors (contact in payload.person)
+  user_id: string | null;
   event_type: string;
   property_id: string | null;
   payload: Record<string, unknown>;
@@ -78,7 +79,12 @@ async function buildEvent(row: FubEventRow, profile: Record<string, any>) {
     source: SOURCE,
     system: Deno.env.get('FUB_SYSTEM') ?? 'HomeFind-AI',
     type: row.event_type,
-    person: { firstName, lastName, emails: [{ value: profile.email }] },
+    person: {
+      firstName,
+      lastName,
+      emails: [{ value: profile.email }],
+      ...(profile.phone ? { phones: [{ value: profile.phone }] } : {}),
+    },
   };
 
   let property: Record<string, any> | null = null;
@@ -101,6 +107,7 @@ async function buildEvent(row: FubEventRow, profile: Record<string, any>) {
 
     case 'Property Inquiry': {
       if (!property) return null;
+      if (row.payload.source === 'ai_chat') tags.push('AI Chat');
       const intent = row.payload.intent === 'tour' ? 'tour' : 'question';
       const note = typeof row.payload.message === 'string' ? row.payload.message.trim() : '';
       if (intent === 'tour') {
@@ -190,14 +197,22 @@ export async function sendEvent(row: FubEventRow): Promise<SendResult> {
   const apiKey = Deno.env.get('FOLLOW_UP_BOSS_API_KEY');
   if (!apiKey) return { status: 'retry', error: 'FOLLOW_UP_BOSS_API_KEY not set' };
 
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('id, email, full_name, role, is_user_admin, fub_contact_id')
-    .eq('id', row.user_id)
-    .maybeSingle();
+  let profile: Record<string, any> | null;
+  if (row.user_id) {
+    const { data } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, full_name, role, is_user_admin, fub_contact_id')
+      .eq('id', row.user_id)
+      .maybeSingle();
+    profile = data;
+    if (profile?.role === 'admin' || profile?.is_user_admin) return { status: 'skipped', error: 'admin account' };
+  } else {
+    // Signed-out visitor (AI chat tour request): contact comes with the event.
+    const person = (row.payload.person ?? {}) as Record<string, string>;
+    profile = { id: null, email: person.email, full_name: person.name, phone: person.phone, fub_contact_id: null };
+  }
 
   if (!profile?.email) return { status: 'skipped', error: 'profile or email missing' };
-  if (profile.role === 'admin' || profile.is_user_admin) return { status: 'skipped', error: 'admin account' };
 
   const body = await buildEvent(row, profile);
   if (!body) return { status: 'skipped', error: 'nothing to send (listing or search criteria gone)' };
@@ -217,7 +232,7 @@ export async function sendEvent(row: FubEventRow): Promise<SendResult> {
   // but ignored it (lead flow set to archive). All three are final.
   if (res.ok) {
     let personId: string | null = profile.fub_contact_id ?? null;
-    if (!personId) {
+    if (!personId && profile.id) {
       personId = await lookupPersonId(apiKey, profile.email);
       if (personId) {
         await supabaseAdmin.from('profiles').update({ fub_contact_id: personId }).eq('id', profile.id);

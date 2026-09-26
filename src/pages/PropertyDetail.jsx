@@ -919,9 +919,7 @@ export default function PropertyDetail() {
         </DialogContent>
       </Dialog>
 
-      {user && property && (
-        <AIAssistant user={user} contextData={{ currentProperty: { address: property.address, price: property.price, bedrooms: property.bedrooms, bathrooms: property.bathrooms } }} />
-      )}
+      <AIAssistant user={user} propertyId={property.id} />
 
       {/* Fullscreen Image Modal */}
       {isFullscreen && (

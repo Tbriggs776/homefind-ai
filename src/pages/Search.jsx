@@ -504,6 +504,13 @@ export default function Search() {
     }).catch(() => {});
   }, []);
 
+  // The AI assistant's Apply/Undo: replace filters and remount SearchFilters
+  // so its chips reflect the new values.
+  const applyAssistantFilters = (newFilters) => {
+    handleFilterChange(newFilters);
+    setFiltersResetKey(k => k + 1);
+  };
+
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
     setCurrentPage(1);
@@ -792,13 +799,7 @@ export default function Search() {
         </div>
       )}
 
-      {user && (
-        <AIAssistant
-          user={user}
-          contextData={{ filters, propertyCount: properties.length }}
-          onApplyFilters={handleFilterChange}
-        />
-      )}
+      <AIAssistant user={user} filters={filters} onApplyFilters={applyAssistantFilters} />
     </div>
   );
 }

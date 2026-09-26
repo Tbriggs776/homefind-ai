@@ -4,6 +4,11 @@ import debug from '@/lib/debug';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bfnudxyxgjhdqwlcqyar.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmbnVkeHl4Z2poZHF3bGNxeWFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMzMyMjEsImV4cCI6MjA5MDgwOTIyMX0.H6LBxejXxnsqzsjtVFUPF4qq21ra1yRiXIRoWLlxHLQ';
 
+// Exported for callers that need raw fetch (e.g. streaming edge functions,
+// which supabase.functions.invoke can't consume incrementally).
+export const SUPABASE_URL = supabaseUrl;
+export const SUPABASE_ANON_KEY = supabaseAnonKey;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     // Bypass navigator.locks to prevent deadlock with browser extensions / multiple tabs.
