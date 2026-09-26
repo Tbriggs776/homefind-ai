@@ -5,6 +5,10 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import {
   ArrowLeft, Heart, Bed, Bath, Square, MapPin,
   Calendar, Loader2, ChevronLeft, ChevronRight, X, Expand,
@@ -87,6 +91,8 @@ export default function PropertyDetail() {
   const [showLoginGate, setShowLoginGate] = useState(false);
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactSuccess, setContactSuccess] = useState(false);
+  const [questionOpen, setQuestionOpen] = useState(false);
+  const [questionText, setQuestionText] = useState('');
 
   // Mortgage calculator state — defaults match the conventional buyer profile
   // (20% down, 30-year fixed, 6.5% rate). Buyers can adjust each value via the
@@ -276,42 +282,54 @@ export default function PropertyDetail() {
   // ============================================================================
   // CRANDELL CONTACT HANDLER
   // ----------------------------------------------------------------------------
-  // This calls the existing contactAgentForProperty edge function (which we
-  // trust is wired to FUB and routes leads to Tanner Crandell, NOT to the
-  // listing brokerage). The frontend now makes it explicit the buyer is
-  // contacting Tanner — not the eXp Realty / HomeSmart / etc. listing agent
-  // shown in the legally-required ARMLS attribution.
+  // contactAgentForProperty sends a Follow Up Boss "Property Inquiry" event
+  // routed to Tanner Crandell — NOT to the listing brokerage shown in the
+  // legally-required ARMLS attribution. Tours go straight through; questions
+  // open a dialog first so the buyer's actual question reaches Tanner.
   // ============================================================================
-  const handleCrandellContact = async (intent) => {
+  const handleCrandellContact = async (intent, message = '') => {
     if (!user) {
       navigate('/Login');
-      return;
+      return false;
     }
     setContactSubmitting(true);
     try {
       const response = await invokeFunction('contactAgentForProperty', {
-        property: {
-          id: property.id,
-          address: property.address,
-          city: property.city,
-          state: property.state,
-          zip_code: property.zip_code,
-          price: property.price,
-          bedrooms: property.bedrooms,
-          bathrooms: property.bathrooms,
-          square_feet: property.square_feet,
-          mls_number: property.mls_number
-        },
-        intent  // 'tour' or 'question' — backend can route accordingly
+        property: { id: property.id },
+        intent,
+        message,
       });
-      if (response.success) {
+      if (response?.success) {
         setContactSuccess(true);
         setTimeout(() => setContactSuccess(false), 5000);
+        return true;
       }
+      alert('Sorry — we couldn\'t send your request. Please call (480) 544-1539.');
+      return false;
     } catch {
-      alert('Sorry — we couldn\'t send your request. Please try again or call directly.');
+      alert('Sorry — we couldn\'t send your request. Please call (480) 544-1539.');
+      return false;
     } finally {
       setContactSubmitting(false);
+    }
+  };
+
+  const openQuestion = () => {
+    if (!user) {
+      navigate('/Login');
+      return;
+    }
+    setQuestionOpen(true);
+  };
+
+  const submitQuestion = async (e) => {
+    e.preventDefault();
+    const text = questionText.trim();
+    if (!text) return;
+    const ok = await handleCrandellContact('question', text);
+    if (ok) {
+      setQuestionOpen(false);
+      setQuestionText('');
     }
   };
 
@@ -582,7 +600,7 @@ export default function PropertyDetail() {
                         variant="brandOutline"
                         className="w-full"
                         disabled={contactSubmitting}
-                        onClick={() => handleCrandellContact('question')}
+                        onClick={openQuestion}
                       >
                         <MessageCircle className="h-4 w-4 mr-2" />
                         Ask a Question
@@ -840,7 +858,7 @@ export default function PropertyDetail() {
               variant="brandOutline"
               className="flex-1 px-2"
               disabled={contactSubmitting}
-              onClick={() => handleCrandellContact('question')}
+              onClick={openQuestion}
             >
               Ask
             </Button>
@@ -856,6 +874,38 @@ export default function PropertyDetail() {
           </div>
         )}
       </div>
+
+      <Dialog open={questionOpen} onOpenChange={setQuestionOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <form onSubmit={submitQuestion}>
+            <DialogHeader>
+              <DialogTitle>Ask Tanner about this home</DialogTitle>
+              <DialogDescription>
+                {property.address}, {property.city}. Tanner will reply by text or email.
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              value={questionText}
+              onChange={(e) => setQuestionText(e.target.value)}
+              placeholder="e.g. Is the seller open to concessions? How old is the roof?"
+              maxLength={2000}
+              rows={5}
+              autoFocus
+              className="my-4"
+              aria-label="Your question"
+            />
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="brandOutline" onClick={() => setQuestionOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="brand" disabled={contactSubmitting || !questionText.trim()}>
+                {contactSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                Send Question
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {user && property && (
         <AIAssistant user={user} contextData={{ currentProperty: { address: property.address, price: property.price, bedrooms: property.bedrooms, bathrooms: property.bathrooms } }} />

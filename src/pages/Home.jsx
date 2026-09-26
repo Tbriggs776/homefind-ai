@@ -75,7 +75,6 @@ export default function Home() {
       if (user) {
         try { await invokeFunction('markUserActive', { userId: user.id }); } catch {}
         try { await invokeFunction('sendWelcomeEmail', { userId: user.id }); } catch {}
-        try { await invokeFunction('syncNewUserToFollowUpBoss', { userId: user.id }); } catch {}
 
         try {
           const { data: saved } = await supabase
