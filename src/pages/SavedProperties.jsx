@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import PropertyCard from '../components/properties/PropertyCard';
 import RecommendedProperties from '../components/recommendations/RecommendedProperties';
 import EmptyState from '../components/EmptyState';
+import SavedSearchesList from '../components/properties/SavedSearchesList';
 import { Loader2, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -74,9 +75,11 @@ export default function SavedProperties() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="crandell-container py-12">
         <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">Saved Properties</h1>
-          <p className="text-slate-600">Your favorite homes all in one place</p>
+          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">Saved Homes</h1>
+          <p className="text-slate-600">Your favorite homes and saved searches, all in one place</p>
         </div>
+
+        <SavedSearchesList user={user} />
 
         {isLoading ? (
           <div className="flex justify-center items-center py-20">

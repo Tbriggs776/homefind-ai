@@ -10,6 +10,7 @@ import AIAssistant from '../components/ai/AIAssistant';
 import EmptyState from '../components/EmptyState';
 
 import NearbyBanner from '../components/properties/NearbyBanner';
+import SaveSearchDialog from '../components/properties/SaveSearchDialog';
 import { Button } from '@/components/ui/button';
 import { Loader2, Grid3x3, Map, Scale, X, ChevronLeft, ChevronRight, SearchX } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -668,6 +669,7 @@ export default function Search() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 md:gap-3 min-w-0">
+                <SaveSearchDialog user={user} filters={filters} />
                 <div className="flex items-center gap-2 flex-1 md:flex-none min-w-0">
                   <label htmlFor="sort-select" className="text-sm text-muted-foreground whitespace-nowrap">
                     Sort:

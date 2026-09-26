@@ -167,6 +167,31 @@ async function buildEvent(row: FubEventRow, profile: Record<string, any>) {
       break;
     }
 
+    case 'Saved Property Search': {
+      const f = (row.payload.filters ?? {}) as Record<string, any>;
+      const num = (v: unknown) => (v === '' || v == null || Number.isNaN(Number(v)) ? undefined : Number(v));
+      const cities: string[] = Array.isArray(f.cities) && f.cities.length ? f.cities : f.city ? [f.city] : [];
+      body.propertySearch = {
+        type: 'For Sale',
+        city: cities.length === 1 ? cities[0] : undefined,
+        state: 'AZ',
+        code: f.zip_code || undefined,
+        minPrice: num(f.min_price),
+        maxPrice: num(f.max_price),
+        minBedrooms: num(f.bedrooms),
+        minBathrooms: num(f.bathrooms),
+      };
+      tags.push('Saved Search');
+      const parts = [
+        cities.length ? cities.join(', ') : null,
+        f.min_price || f.max_price ? `${money(num(f.min_price)) || 'any'}–${money(num(f.max_price)) || 'any'}` : null,
+        f.bedrooms ? `${f.bedrooms}+ bd` : null,
+        f.bathrooms ? `${f.bathrooms}+ ba` : null,
+      ].filter(Boolean);
+      body.message = `Saved a search with listing alerts: "${row.payload.name}"${parts.length ? ` (${parts.join(' · ')})` : ''}`;
+      break;
+    }
+
     default:
       return null;
   }
@@ -271,4 +296,23 @@ export async function processEvent(row: FubEventRow): Promise<SendResult> {
   const { error } = await supabaseAdmin.from('fub_events').update(update).eq('id', row.id);
   if (error) console.error(`[fub] failed to record outcome for event ${row.id}:`, error);
   return result;
+}
+
+// Add a note to a FUB contact (no lead routing — used for activity summaries
+// such as saved-search alert digests). Returns true on success.
+export async function postFubNote(personId: string, subject: string, body: string): Promise<boolean> {
+  const apiKey = Deno.env.get('FOLLOW_UP_BOSS_API_KEY');
+  if (!apiKey) return false;
+  try {
+    const res = await fetch(`${FUB_BASE}/notes`, {
+      method: 'POST',
+      headers: fubHeaders(apiKey),
+      body: JSON.stringify({ personId: Number(personId) || personId, subject, body }),
+    });
+    if (!res.ok) console.error('[fub] note failed:', res.status, (await res.text()).slice(0, 200));
+    return res.ok;
+  } catch (err) {
+    console.error('[fub] note failed:', err);
+    return false;
+  }
 }

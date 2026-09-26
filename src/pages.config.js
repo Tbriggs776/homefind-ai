@@ -10,6 +10,7 @@ import PropertyCompare from './pages/PropertyCompare';
 import PropertyDetail from './pages/PropertyDetail';
 import SavedProperties from './pages/SavedProperties';
 import Search from './pages/Search';
+import Unsubscribed from './pages/Unsubscribed';
 import __Layout from './Layout.jsx';
 
 
@@ -26,6 +27,7 @@ export const PAGES = {
     "PropertyDetail": PropertyDetail,
     "SavedProperties": SavedProperties,
     "Search": Search,
+    "Unsubscribed": Unsubscribed,
 }
 
 export const pagesConfig = {
