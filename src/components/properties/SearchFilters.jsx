@@ -460,7 +460,7 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
   );
 
   const PricePopover = (close) => (
-    <div className="space-y-1 max-h-[400px] overflow-y-auto">
+    <div className="space-y-1 max-h-[min(400px,50vh)] overflow-y-auto">
       {PRICE_PRESETS.map(p => (
         <button
           key={p.value}
@@ -678,7 +678,7 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
           start above the fold; desktop wraps. Overflow stays visible on
           desktop because those chips open absolutely-positioned popovers.
           ==================================================================== */}
-      <div className="flex flex-nowrap md:flex-wrap items-center gap-2 mb-3 overflow-x-auto md:overflow-visible scrollbar-none -mx-[calc(var(--crandell-page-padding)+2.5vw)] px-[calc(var(--crandell-page-padding)+2.5vw)] md:mx-0 md:px-0">
+      <div className="flex flex-nowrap md:flex-wrap items-center gap-2 mb-3 overflow-x-auto md:overflow-visible scrollbar-none -mx-[var(--crandell-page-padding)] px-[var(--crandell-page-padding)] md:mx-0 md:px-0">
         <FilterChip label={statusLabel} isActive={!!filters.status}>
           {StatusPopover}
         </FilterChip>

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Users, Loader2, Search, Mail, Filter, Trash2, UserPlus, Shield, CheckSquare, RotateCw } from 'lucide-react';
+import { Users, Loader2, Search, Mail, Filter, Trash2, UserPlus, Shield, CheckSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import OnboardingTour from '../components/onboarding/OnboardingTour';
 import { InfoTooltip } from '../components/ui/tooltip-wrapper';
@@ -289,7 +289,7 @@ export default function ManageUsers() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8" data-tour="stats">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8" data-tour="stats">
           <Card className="bg-white shadow-lg border-slate-200">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">

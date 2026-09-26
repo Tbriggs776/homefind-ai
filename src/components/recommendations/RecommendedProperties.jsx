@@ -49,7 +49,7 @@ export default function RecommendedProperties({ user, savedPropertyIds = [], onF
           <Loader2 className="h-8 w-8 animate-spin text-slate-600 dark:text-slate-400" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6">
           {recommendations.map(property => (
             <PropertyCard
               key={property.id}

@@ -10,7 +10,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, User, Mail, Shield, Eye, Heart, MessageCircle, Trash2 } from 'lucide-react';
+import { Loader2, Mail, Shield, Eye, Heart, MessageCircle, Trash2 } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
 export default function Profile() {
@@ -80,7 +80,7 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto px-[var(--crandell-page-padding)]">
         <h1 className="text-3xl font-bold text-slate-900 mb-8">My Profile</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

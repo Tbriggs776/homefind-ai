@@ -309,7 +309,7 @@ export default function Home() {
           <h2 className="text-center text-foreground font-normal mb-8 text-2xl md:text-3xl">
             Not sure where to start?
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 max-w-5xl mx-auto items-stretch">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 max-w-6xl mx-auto items-stretch">
             {/* Search Homes card */}
             <Link
               to={createPageUrl('Search')}

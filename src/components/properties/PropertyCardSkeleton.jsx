@@ -27,7 +27,7 @@ export default function PropertyCardSkeleton() {
   );
 }
 
-export function PropertyCardSkeletonGrid({ count = 6, className = 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' }) {
+export function PropertyCardSkeletonGrid({ count = 6, className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6' }) {
   return (
     <div className={className}>
       {Array.from({ length: count }).map((_, i) => (

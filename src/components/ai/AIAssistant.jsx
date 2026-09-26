@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MessageCircle, X, Send, Loader2, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, invokeFunction } from '@/api/supabaseClient';
 import ReactMarkdown from 'react-markdown';
@@ -246,7 +246,7 @@ What would you like to know?`
 
               <CardContent className="p-0">
                 {/* Messages */}
-                <div className="h-96 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-800">
+                <div className="h-[min(24rem,calc(100dvh-14rem))] overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-800">
                   {messages.map((message, idx) => (
                     <div
                       key={idx}

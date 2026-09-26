@@ -386,7 +386,7 @@ export default function PropertyDetail() {
                 actually gets the visual weight a $XXX,000 listing deserves.
                 Mobile keeps the smaller height for vertical space efficiency.
                 ================================================================ */}
-            <Card className="overflow-hidden shadow-lg border-border -mx-[calc(var(--crandell-page-padding)+2.5vw)] rounded-none border-x-0 sm:mx-0 sm:rounded-xl sm:border-x">
+            <Card className="overflow-hidden shadow-lg border-border -mx-[var(--crandell-page-padding)] rounded-none border-x-0 sm:mx-0 sm:rounded-xl sm:border-x">
               <div
                 className="relative aspect-[4/3] bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary touch-pan-y"
                 onTouchStart={handleTouchStart}

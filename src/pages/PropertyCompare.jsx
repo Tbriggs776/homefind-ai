@@ -12,6 +12,13 @@ import ReactMarkdown from 'react-markdown';
 import EmptyState from '../components/EmptyState';
 import { listingPhotoProps, PHOTO_PLACEHOLDER } from '@/lib/listingPhotos';
 
+// Column count per number of compared homes (Search allows up to 4).
+const COMPARE_COLUMNS = {
+  2: 'md:grid-cols-2',
+  3: 'md:grid-cols-3',
+  4: 'md:grid-cols-2 xl:grid-cols-4',
+};
+
 export default function PropertyCompare() {
   const { user, isAuthenticated, isLoadingAuth } = useAuth();
   const [propertyIds, setPropertyIds] = useState([]);
@@ -129,7 +136,7 @@ export default function PropertyCompare() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={`grid grid-cols-1 gap-6 ${COMPARE_COLUMNS[Math.min(properties.length, 4)] ?? ''}`}>
           {properties.map((property, idx) => (
             <Card key={property.id} className="overflow-hidden shadow-lg border-slate-200">
               <div className="relative aspect-[3/2] bg-muted">

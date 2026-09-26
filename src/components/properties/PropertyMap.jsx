@@ -165,7 +165,7 @@ function RefitButton({ properties }) {
   );
 }
 
-export default function PropertyMap({ properties, mapProperties, onFavorite, savedPropertyIds, onBoundsChange, fitVersion = 0 }) {
+export default function PropertyMap({ properties, mapProperties, onFavorite, savedPropertyIds, onBoundsChange, fitVersion = 0, className = 'h-[calc(100dvh-14rem)] min-h-[360px] md:min-h-[480px]' }) {
   // Prefer the dedicated lite mapProperties when present (decoupled query),
   // fall back to the full properties array for backward compat
   const sourceProperties = mapProperties && mapProperties.length > 0 ? mapProperties : properties;
@@ -193,7 +193,7 @@ export default function PropertyMap({ properties, mapProperties, onFavorite, sav
   };
 
   return (
-    <div className="relative h-[70vh] min-h-[500px] rounded-xl overflow-hidden border border-border shadow-lg">
+    <div className={`relative rounded-xl overflow-hidden border border-border shadow-lg ${className}`}>
       <style>{`
         .custom-price-marker { background: transparent !important; border: none !important; }
         .custom-cluster-marker { background: transparent !important; border: none !important; }

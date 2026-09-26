@@ -81,7 +81,7 @@
     /* Layout — the new global container max width.
        Replaces max-w-7xl (1280px) which was jamming content into a
        narrow center column on wide monitors. */
-    --crandell-container-max: min(95vw, 1680px);
+    --crandell-container-max: min(100%, 1680px);
     --crandell-page-padding: clamp(1rem, 3vw, 2.5rem);
 
     /* Shadows */
@@ -259,6 +259,12 @@
     max-width: var(--crandell-container-max);
     margin-inline: auto;
     padding-inline: var(--crandell-page-padding);
+  }
+
+  @media (min-width: 1920px) {
+    :root {
+      --crandell-container-max: 1840px;
+    }
   }
 
   /* Horizontal chip rows on mobile scroll sideways; hide the scrollbar so

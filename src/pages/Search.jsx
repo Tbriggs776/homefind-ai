@@ -41,6 +41,17 @@ const MAP_QUERY_INITIAL_LIMIT = 500;
 // every pan/zoom; without debounce we'd thrash Supabase during a pinch-zoom.
 const BOUNDS_DEBOUNCE_MS = 400;
 
+// Results grids. Full width: up to 4 columns on very wide screens. Map split
+// (lg+): the list column is ~40-50% wide, so 1 column, 2 on 2xl.
+const FULL_GRID = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6';
+const SPLIT_GRID = 'grid grid-cols-1 2xl:grid-cols-2 gap-4';
+
+// Stable fallback for the saved-properties query. An inline `= []` default
+// creates a new array every render while the query is disabled (signed-out
+// visitors), which re-fires the effect that copies it into state — an
+// infinite render loop.
+const NO_SAVED_PROPERTIES = [];
+
 // Apply a Leaflet-style bounding box to a Supabase query.
 // Used by both the grid query (when lockToBounds is on) and the map query.
 function applyBoundsToQuery(query, bounds) {
@@ -231,7 +242,8 @@ export default function Search() {
     }, BOUNDS_DEBOUNCE_MS);
   }, []);
 
-  const PAGE_SIZE = 50;
+  // 48 fills complete rows at 2, 3 and 4 columns.
+  const PAGE_SIZE = 48;
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -356,7 +368,7 @@ export default function Search() {
   });
 
   // Fetch saved properties
-  const { data: savedProperties = [] } = useQuery({
+  const { data: savedProperties = NO_SAVED_PROPERTIES } = useQuery({
     queryKey: ['savedProperties', user?.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -538,6 +550,74 @@ export default function Search() {
     { value: 'newest', label: 'Newest listings' },
   ];
 
+  // Loading skeleton, empty state, or the results grid + pager. Shared by
+  // the full-width grid view and the list column of the desktop map split.
+  const renderResults = (gridClassName, { eagerFirstRow = false } = {}) => {
+    if (isLoading) return <PropertyCardSkeletonGrid count={9} className={gridClassName} />;
+    if (properties.length === 0) return (
+      <EmptyState
+        icon={SearchX}
+        title="No homes match these filters"
+        description="Try widening your price range, removing a city, or clearing filters to see more listings."
+        action={
+          <Button
+            onClick={() => {
+              handleFilterChange({});
+              setFiltersResetKey(k => k + 1);
+            }}
+            className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground"
+          >
+            Clear all filters
+          </Button>
+        }
+      />
+    );
+    return (
+      <>
+        <div className={gridClassName}>
+          {properties.map((property, index) => (
+            <PropertyCard
+              key={property.id}
+              priority={eagerFirstRow && index < 3}
+              property={property}
+              onFavorite={handleFavorite}
+              isFavorited={savedPropertyIds.includes(property.id)}
+              onCompare={handleCompare}
+              isComparing={comparePropertyIds.includes(property.id)}
+              user={user}
+            />
+          ))}
+        </div>
+
+        {(currentPage > 1 || properties.length >= PAGE_SIZE) && (
+          <div className="mt-8 flex items-center justify-center gap-4">
+            <Button
+              variant="outline"
+              onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); window.scrollTo(0, 0); }}
+              disabled={currentPage === 1}
+              className="flex items-center gap-2 select-none"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <span className="text-foreground font-medium">
+              Page {currentPage}{totalPages ? ` of ${totalPages.toLocaleString()}` : ''}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => { setCurrentPage(prev => prev + 1); window.scrollTo(0, 0); }}
+              disabled={properties.length < PAGE_SIZE || (totalPages != null && currentPage >= totalPages)}
+              className="flex items-center gap-2 select-none"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {isRefreshing && (
@@ -641,83 +721,34 @@ export default function Search() {
             </div>
 
             {viewMode === 'map' ? (
-              // Map view — render unconditionally. We never unmount PropertyMap
-              // on loading because that would re-initialize Leaflet and yank
-              // the user's pan/zoom back to the initial fit. With
-              // placeholderData: keepPreviousData on the map query, isLoading
-              // only fires on the very first load (no prior data); subsequent
-              // bounds-driven refetches keep the previous pins visible until
-              // the new ones arrive.
-              <PropertyMap
-                properties={properties}
-                mapProperties={mapProperties}
-                onFavorite={handleFavorite}
-                savedPropertyIds={savedPropertyIds}
-                onBoundsChange={handleBoundsChange}
-                fitVersion={mapFitVersion}
-              />
-            ) : isLoading ? (
-              <PropertyCardSkeletonGrid count={9} />
-            ) : properties.length === 0 ? (
-              <EmptyState
-                icon={SearchX}
-                title="No homes match these filters"
-                description="Try widening your price range, removing a city, or clearing filters to see more listings."
-                action={
-                  <Button
-                    onClick={() => {
-                      handleFilterChange({});
-                      setFiltersResetKey(k => k + 1);
-                    }}
-                    className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground"
-                  >
-                    Clear all filters
-                  </Button>
-                }
-              />
-            ) : (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {properties.map((property, index) => (
-                    <PropertyCard
-                      key={property.id}
-                      priority={index < 3}
-                      property={property}
-                      onFavorite={handleFavorite}
-                      isFavorited={savedPropertyIds.includes(property.id)}
-                      onCompare={handleCompare}
-                      isComparing={comparePropertyIds.includes(property.id)}
-                      user={user}
-                    />
-                  ))}
+              // Map view. Phones: map only. Desktop (lg+): Zillow-style split —
+              // map on the left, sticky while the results list scrolls on the
+              // right; with "Filter list to map area" on (the default) the list
+              // follows the map viewport.
+              //
+              // PropertyMap is rendered unconditionally: unmounting it on
+              // loading would re-initialize Leaflet and yank the user's
+              // pan/zoom back to the initial fit. placeholderData:
+              // keepPreviousData on the map query keeps the previous pins up
+              // while bounds-driven refetches load.
+              <div className="lg:grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] 2xl:grid-cols-2 lg:gap-6 lg:items-start">
+                <div className="lg:sticky lg:top-20">
+                  <PropertyMap
+                    properties={properties}
+                    mapProperties={mapProperties}
+                    onFavorite={handleFavorite}
+                    savedPropertyIds={savedPropertyIds}
+                    onBoundsChange={handleBoundsChange}
+                    fitVersion={mapFitVersion}
+                    className="h-[calc(100dvh-14rem)] min-h-[360px] md:min-h-[480px] lg:h-[calc(100dvh-8rem)]"
+                  />
                 </div>
-
-                {(currentPage > 1 || properties.length >= PAGE_SIZE) && (
-                  <div className="mt-8 flex items-center justify-center gap-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); window.scrollTo(0, 0); }}
-                      disabled={currentPage === 1}
-                      className="flex items-center gap-2 select-none"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Previous
-                    </Button>
-                    <span className="text-foreground font-medium">
-                      Page {currentPage}{totalPages ? ` of ${totalPages.toLocaleString()}` : ''}
-                    </span>
-                    <Button
-                      variant="outline"
-                      onClick={() => { setCurrentPage(prev => prev + 1); window.scrollTo(0, 0); }}
-                      disabled={properties.length < PAGE_SIZE || (totalPages != null && currentPage >= totalPages)}
-                      className="flex items-center gap-2 select-none"
-                    >
-                      Next
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </>
+                <div className="hidden lg:block">
+                  {renderResults(SPLIT_GRID)}
+                </div>
+              </div>
+            ) : (
+              renderResults(FULL_GRID, { eagerFirstRow: true })
             )}
           </div>
         </div>
