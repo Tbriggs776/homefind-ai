@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, invokeFunction } from '@/api/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Search, ArrowRight, Home as HomeIcon, DollarSign, CheckCircle } from 'lucide-react';
+import { Search, ArrowRight, Home as HomeIcon, DollarSign, CheckCircle, Star, Award, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '../utils';
 import PropertyCard from '../components/properties/PropertyCard';
@@ -10,6 +10,11 @@ import { PropertyCardSkeletonGrid } from '../components/properties/PropertyCardS
 import RecentlyViewed from '../components/home/RecentlyViewed';
 
 // Quick-filter chips for the East Valley cities Crandell specializes in.
+// Social proof carried over from crandellrealestate.com so the search app
+// earns the same trust as the main site.
+const GOOGLE_RATING = '5.0';
+const GOOGLE_REVIEW_COUNT = 40;
+
 const QUICK_CITIES = [
   'Queen Creek',
   'San Tan Valley',
@@ -42,7 +47,7 @@ export default function Home() {
           .not('longitude', 'is', null)
           .eq('list_agent_mls_id', TANNER_AGENT_ID)
           .order('created_at', { ascending: false })
-          .limit(8);
+          .limit(9);
 
         let featured = primaryResult.data || [];
 
@@ -178,13 +183,14 @@ export default function Home() {
         </div>
 
         <div className="crandell-container relative">
-          <div className="max-w-xl py-16 md:py-24 lg:py-28">
+          <div className="max-w-2xl lg:max-w-[48%] py-12 md:py-24 lg:py-28">
               <p className="text-primary uppercase tracking-wider text-sm font-semibold mb-3">
                 Crandell Home Intelligence
               </p>
 
-              <h1 className="text-white font-normal leading-tight mb-4" style={{ fontSize: 'var(--crandell-text-display)' }}>
-                Find the right home.<br />Not just the next one.
+              <h1 className="text-white font-normal leading-[1.05] mb-4" style={{ fontSize: 'clamp(2.25rem, 3.4vw + 1rem, 4rem)' }}>
+                <span className="inline-block">Find the right home.</span>{' '}
+                <span className="inline-block">Not just the next one.</span>
               </h1>
 
               <p className="text-white/80 text-lg md:text-xl mb-8 max-w-xl">
@@ -205,9 +211,11 @@ export default function Home() {
                 />
                 <Button
                   type="submit"
-                  className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground px-6 py-6 font-semibold whitespace-nowrap"
+                  variant="brand"
+                  className="px-4 sm:px-6 py-6 whitespace-nowrap"
                 >
-                  Search Homes
+                  <span className="hidden sm:inline">Search Homes</span>
+                  <span className="sm:hidden">Search</span>
                 </Button>
               </form>
 
@@ -246,8 +254,9 @@ export default function Home() {
                 <div className="mt-3">
                   <Button
                     type="button"
+                    variant="brand"
                     onClick={handleSearchCities}
-                    className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground px-5 py-5 font-semibold"
+                    className="px-5 py-5"
                   >
                     Search {selectedCities.length} {selectedCities.length === 1 ? 'city' : 'cities'}
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -259,18 +268,52 @@ export default function Home() {
       </section>
 
       {/* ================================================================
-          NOT SURE WHERE TO START? — three-column: two cards + buttons
+          TRUST STRIP — the main site's proof points, in one line
+          ================================================================ */}
+      <section className="bg-white border-b border-border">
+        <div className="crandell-container py-4 md:py-5">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm">
+            <li className="flex items-center gap-2 text-foreground">
+                <span className="flex text-amber-400" aria-hidden="true">
+                  {[0, 1, 2, 3, 4].map((i) => <Star key={i} className="h-4 w-4 fill-current" />)}
+                </span>
+                <span>
+                  <span className="font-semibold">{GOOGLE_RATING}</span>
+                  <span className="text-muted-foreground"> · {GOOGLE_REVIEW_COUNT} Google reviews</span>
+                </span>
+            </li>
+            <li className="flex items-center gap-2 text-foreground">
+              <Award className="h-4 w-4 text-primary flex-shrink-0" />
+              <span><span className="font-semibold">Top 1%</span><span className="text-muted-foreground"> of Arizona agents (2024)</span></span>
+            </li>
+            <li className="flex items-center gap-2 text-foreground">
+              <Users className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-muted-foreground">Featured in <span className="text-foreground font-semibold">East Valley Real Producers</span></span>
+            </li>
+            <li className="flex items-center gap-2 text-foreground">
+              <HomeIcon className="h-4 w-4 text-primary flex-shrink-0" />
+              <span>
+                <span className="font-semibold">{totalListings || '30,000+'}</span>
+                <span className="text-muted-foreground"> active Arizona homes</span>
+              </span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      {/* ================================================================
+          NOT SURE WHERE TO START? — three equal cards
           ================================================================ */}
       <section className="bg-white py-12 md:py-16 border-b border-border">
         <div className="crandell-container">
           <h2 className="text-center text-foreground font-normal mb-8 text-2xl md:text-3xl">
             Not sure where to start?
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto items-start">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 max-w-5xl mx-auto items-stretch">
             {/* Search Homes card */}
             <Link
               to={createPageUrl('Search')}
-              className="group border border-border rounded-xl p-6 md:p-8 hover:border-primary hover:shadow-md transition-all text-center"
+              className="group border border-border rounded-xl p-6 md:p-8 hover:border-primary hover:shadow-md transition-all text-center h-full"
             >
               <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                 <HomeIcon className="h-6 w-6 text-primary" />
@@ -284,9 +327,7 @@ export default function Home() {
             {/* Sell Before You Buy card */}
             <a
               href="https://crandellrealestate.com/sell/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group border border-border rounded-xl p-6 md:p-8 hover:border-primary hover:shadow-md transition-all text-center"
+              className="group border border-border rounded-xl p-6 md:p-8 hover:border-primary hover:shadow-md transition-all text-center h-full"
             >
               <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                 <DollarSign className="h-6 w-6 text-primary" />
@@ -297,32 +338,20 @@ export default function Home() {
               </p>
             </a>
 
-            {/* Stacked CTA buttons */}
-            <div className="flex flex-col gap-3 justify-center h-full">
-              <a
-                href="https://crandellrealestate.com/our-team/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button
-                  variant="outline"
-                  className="w-full border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground py-6 text-base font-semibold"
-                >
-                  Meet the Team
-                </Button>
-              </a>
-              <a
-                href="https://crandellrealestate.com/sell/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button
-                  className="w-full bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground py-6 text-base font-semibold"
-                >
-                  Sell First
-                </Button>
-              </a>
-            </div>
+            {/* Meet the Team card */}
+            <a
+              href="https://crandellrealestate.com/our-team/"
+              className="group border border-border rounded-xl p-6 md:p-8 hover:border-primary hover:shadow-md transition-all text-center h-full"
+            >
+              <div className="flex justify-center -space-x-3 mb-4">
+                <img src="/team/tanner.jpg" alt="Tanner Crandell" loading="lazy" decoding="async" className="w-12 h-12 rounded-full object-cover ring-2 ring-white bg-muted" />
+                <img src="/team/cailie.jpg" alt="Cailie Crandell" loading="lazy" decoding="async" className="w-12 h-12 rounded-full object-cover ring-2 ring-white bg-muted" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Meet the Team</h3>
+              <p className="text-muted-foreground text-sm">
+                Tanner and Cailie Crandell, born and raised in Arizona.
+              </p>
+            </a>
           </div>
         </div>
       </section>
@@ -350,13 +379,23 @@ export default function Home() {
               <p className="text-muted-foreground leading-relaxed">
                 When you work with us, you're not getting a random agent. You're getting a strategy built around how this market actually moves.
               </p>
+              <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                <a href="https://crandellrealestate.com/contact/">
+                  <Button variant="brand" className="w-full sm:w-auto px-6 py-5">
+                    Schedule a Strategy Call
+                  </Button>
+                </a>
+                <a href="https://crandellrealestate.com/our-team/">
+                  <Button variant="brandOutline" className="w-full sm:w-auto px-6 py-5">
+                    Meet the Team
+                  </Button>
+                </a>
+              </div>
             </div>
 
             {/* Right column — wide team photo (clickable) */}
             <a
               href="https://crandellrealestate.com/our-team/"
-              target="_blank"
-              rel="noopener noreferrer"
               className="block hover:opacity-90 transition-opacity"
             >
               <img
@@ -393,11 +432,11 @@ export default function Home() {
 
               {loading ? (
                 <PropertyCardSkeletonGrid
-                  count={8}
-                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                  count={6}
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                 />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {featuredProperties.map(property => (
                     <PropertyCard
                       key={property.id}
@@ -421,7 +460,7 @@ export default function Home() {
 
           <div className="text-center mt-12">
             <Link to={createPageUrl('Search')}>
-              <Button className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold px-10 py-6 text-lg">
+              <Button variant="brand" className="px-10 py-6">
                 Search All Arizona Homes
               </Button>
             </Link>

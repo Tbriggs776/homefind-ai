@@ -19,6 +19,14 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        // Brand CTAs — match crandellrealestate.com's square, uppercase,
+        // letter-spaced buttons ("START YOUR SEARCH", "SCHEDULE A STRATEGY CALL").
+        brand:
+          "bg-primary text-primary-foreground shadow-sm hover:bg-[var(--crandell-primary-hover)] uppercase tracking-[0.08em] font-medium",
+        brandDark:
+          "bg-secondary text-secondary-foreground shadow-sm hover:bg-[var(--crandell-charcoal-hover)] uppercase tracking-[0.08em] font-medium",
+        brandOutline:
+          "border border-secondary text-secondary bg-transparent hover:bg-secondary hover:text-secondary-foreground uppercase tracking-[0.08em] font-medium",
       },
       size: {
         default: "h-9 md:h-9 h-11 px-4 py-2",
@@ -27,6 +35,11 @@ const buttonVariants = cva(
         icon: "h-11 w-11 md:h-9 md:w-9",
       },
     },
+    // compoundVariants are emitted after size classes, so this wins over the
+    // rounded-md that the sm/lg sizes carry.
+    compoundVariants: [
+      { variant: ["brand", "brandDark", "brandOutline"], class: "rounded-[2px]" },
+    ],
     defaultVariants: {
       variant: "default",
       size: "default",

@@ -17,9 +17,31 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { createPageUrl } from './utils';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Home, Heart, LayoutDashboard, LogOut, User, Menu, X, Search, TrendingUp } from 'lucide-react';
+import { Home, Heart, LayoutDashboard, LogOut, User, Menu, X, Search, TrendingUp, Phone, Mail, MapPin, ExternalLink } from 'lucide-react';
 
 import MortgageRateTicker from '@/components/MortgageRateTicker';
+
+// The search app lives on a subdomain of crandellrealestate.com. These links
+// send buyers back to the pages the search app doesn't replicate, so the two
+// sites read as one product instead of a dead-end search tool.
+const MAIN_SITE = 'https://crandellrealestate.com';
+const MAIN_SITE_LINKS = [
+  { name: 'Sell', href: `${MAIN_SITE}/sell/` },
+  { name: 'Our Team', href: `${MAIN_SITE}/our-team/` },
+  { name: 'Contact', href: `${MAIN_SITE}/contact/` },
+];
+const TEAM_PHONE_DISPLAY = '(480) 544-1539';
+const TEAM_PHONE_TEL = 'tel:+14805441539';
+const TEAM_EMAIL = 'tanner@crandellrealestate.com';
+const SOCIAL_LINKS = [
+  { name: 'Facebook', href: 'https://www.facebook.com/CrandellRealEstateTeam' },
+  { name: 'Instagram', href: 'https://www.instagram.com/crandellrealestateteam' },
+  { name: 'LinkedIn', href: 'https://www.linkedin.com/in/crandellrealestate/' },
+];
+
+// Pages with their own sticky mobile action bar hide the rate ticker on
+// phones so the two fixed bars don't stack.
+const HIDE_TICKER_ON_MOBILE = ['PropertyDetail'];
 
 export default function Layout({ children, currentPageName }) {
   const { user, isAuthenticated, logout } = useAuth();
@@ -76,11 +98,13 @@ export default function Layout({ children, currentPageName }) {
             {/* Logo */}
             <Link to={createPageUrl('Home')} className="flex items-center group">
               <img
-                src="/balboa-realty-logo.png"
+                src="/crandell-balboa-logo.png"
                 alt="Crandell Real Estate Team - Balboa Realty"
                 loading="eager"
                 decoding="async"
-                className="h-12 md:h-14 w-auto object-contain group-hover:opacity-90 transition-opacity"
+                width="736"
+                height="121"
+                className="h-6 min-[400px]:h-7 md:h-10 w-auto object-contain group-hover:opacity-90 transition-opacity"
               />
             </Link>
 
@@ -105,37 +129,47 @@ export default function Layout({ children, currentPageName }) {
                   </Link>
                 );
               })}
+              <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />
+              {MAIN_SITE_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="px-3 py-2 text-sm text-foreground hover:text-primary transition-colors select-none"
+                >
+                  {link.name}
+                </a>
+              ))}
             </nav>
 
-            {/* Right side: Sign In or Hamburger Menu */}
+            {/* Right side: Sign In + menu. Anonymous visitors get the menu on
+                mobile only (desktop shows every link inline); signed-in users
+                get it on every size for Profile / Admin / Sign Out. */}
             <div className="flex items-center gap-2">
               {!user && (
                 <Link to="/Login">
-                  <Button
-                    className="bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground select-none font-semibold"
-                  >
+                  <Button variant="brand" className="select-none h-9 px-3 text-xs md:h-9 md:px-4 md:text-sm">
                     Sign In
                   </Button>
                 </Link>
               )}
-              {user && (
-                <button
-                  className="p-2 rounded-lg hover:bg-muted transition-colors"
-                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                >
-                  {mobileMenuOpen ? (
-                    <X className="h-6 w-6 text-muted-foreground" />
-                  ) : (
-                    <Menu className="h-6 w-6 text-muted-foreground" />
-                  )}
-                </button>
-              )}
+              <button
+                className={`p-2 rounded-lg hover:bg-muted transition-colors ${user ? '' : 'md:hidden'}`}
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={mobileMenuOpen}
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-6 w-6 text-muted-foreground" />
+                ) : (
+                  <Menu className="h-6 w-6 text-muted-foreground" />
+                )}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Hamburger Menu (all screen sizes, for logged-in users) */}
-        {mobileMenuOpen && user && (
+        {/* Hamburger menu */}
+        {mobileMenuOpen && (
           <div className="border-t border-border bg-white absolute right-0 top-full w-64 shadow-xl rounded-bl-xl z-50">
             <div className="px-4 py-4 space-y-1">
               {/* Mobile-only: show main nav links */}
@@ -155,9 +189,24 @@ export default function Layout({ children, currentPageName }) {
                     </Link>
                   );
                 })}
-                <div className="border-t border-border my-2" />
+                {MAIN_SITE_LINKS.map((link) => (
+                  <a key={link.href} href={link.href}>
+                    <Button variant="ghost" className="w-full justify-start gap-2 text-foreground">
+                      <ExternalLink className="h-4 w-4" />
+                      {link.name}
+                    </Button>
+                  </a>
+                ))}
+                <a href={TEAM_PHONE_TEL}>
+                  <Button variant="ghost" className="w-full justify-start gap-2 text-foreground">
+                    <Phone className="h-4 w-4" />
+                    {TEAM_PHONE_DISPLAY}
+                  </Button>
+                </a>
+                {user && <div className="border-t border-border my-2" />}
               </div>
 
+              {user && (<>
               {/* Profile link */}
               <Link to={createPageUrl('Profile')} onClick={() => setMobileMenuOpen(false)}>
                 <Button variant="ghost" className="w-full justify-start gap-2 text-foreground">
@@ -198,6 +247,7 @@ export default function Layout({ children, currentPageName }) {
                 <LogOut className="h-4 w-4" />
                 Sign Out
               </Button>
+              </>)}
             </div>
           </div>
         )}
@@ -212,14 +262,18 @@ export default function Layout({ children, currentPageName }) {
         {children}
       </main>
 
-      {/* Mortgage Rate Ticker - fixed at bottom on all devices */}
-      <div className="fixed bottom-0 left-0 right-0 z-50" style={{ bottom: 'env(safe-area-inset-bottom)' }}>
+      {/* Mortgage Rate Ticker - fixed at bottom (hidden on phones for pages
+          that have their own sticky action bar) */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 ${HIDE_TICKER_ON_MOBILE.includes(currentPageName) ? 'hidden md:block' : ''}`}
+        style={{ bottom: 'env(safe-area-inset-bottom)' }}
+      >
         <MortgageRateTicker />
       </div>
 
       {/* Footer */}
       <footer
-        className="bg-black text-gray-300 mt-20 mb-16 md:mb-0"
+        className="bg-secondary text-gray-300 mt-20 mb-16 md:mb-0"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="crandell-container py-12">
@@ -228,34 +282,64 @@ export default function Layout({ children, currentPageName }) {
               <h3 className="text-primary font-bold text-lg mb-2">Crandell Real Estate Team</h3>
               <p className="text-sm text-gray-400 font-medium">Balboa Realty</p>
               <p className="text-sm text-gray-400 mt-2">
-                Your premier destination for finding the perfect home in Arizona.
+                Strategic real estate representation in Queen Creek and the East Valley.
               </p>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Quick Links</h4>
-
-              <div className="space-y-2">
-                <Link to={createPageUrl('Home')} className="block text-sm hover:text-white transition-colors">
-                      Home
-                    </Link>
-                    <Link to={createPageUrl('Search')} className="block text-sm hover:text-white transition-colors">
-                      Search Homes
-                    </Link>
-                {user && (
-                  <Link to={createPageUrl('SavedProperties')} className="block text-sm hover:text-white transition-colors">
-                    Saved Properties
-                  </Link>
-                )}
+              <div className="flex gap-4 mt-4">
+                {SOCIAL_LINKS.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    {link.name}
+                  </a>
+                ))}
               </div>
             </div>
             <div>
-              <h4 className="text-white font-semibold mb-4">Contact</h4>
-              <p className="text-sm text-gray-400">
-                Ready to connect external listings and CRM integrations.
-              </p>
+              <h4 className="text-white font-semibold mb-4 uppercase tracking-[0.08em] text-sm">Quick Links</h4>
+              <div className="grid grid-cols-2 gap-y-2 gap-x-6 max-w-xs">
+                <Link to={createPageUrl('Home')} className="block text-sm hover:text-white transition-colors">
+                  Home
+                </Link>
+                <Link to={createPageUrl('Search')} className="block text-sm hover:text-white transition-colors">
+                  Search Homes
+                </Link>
+                {user && (
+                  <Link to={createPageUrl('SavedProperties')} className="block text-sm hover:text-white transition-colors">
+                    Saved Homes
+                  </Link>
+                )}
+                {MAIN_SITE_LINKS.map((link) => (
+                  <a key={link.href} href={link.href} className="block text-sm hover:text-white transition-colors">
+                    {link.name}
+                  </a>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-white font-semibold mb-4 uppercase tracking-[0.08em] text-sm">Contact</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a href={TEAM_PHONE_TEL} className="inline-flex items-center gap-2 hover:text-white transition-colors">
+                    <Phone className="h-4 w-4 text-primary" /> {TEAM_PHONE_DISPLAY}
+                  </a>
+                </li>
+                <li>
+                  <a href={`mailto:${TEAM_EMAIL}`} className="inline-flex items-center gap-2 hover:text-white transition-colors">
+                    <Mail className="h-4 w-4 text-primary" /> {TEAM_EMAIL}
+                  </a>
+                </li>
+                <li className="inline-flex items-start gap-2 text-gray-400">
+                  <MapPin className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                  <span>21227 E Stacey Rd, Queen Creek, AZ 85142</span>
+                </li>
+              </ul>
             </div>
           </div>
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm text-gray-400">
+          <div className="border-t border-white/10 mt-8 pt-8 text-center text-sm text-gray-400">
             <p className="mb-2">&copy; {new Date().getFullYear()} Crandell Real Estate Team — Balboa Realty. All rights reserved.</p>
             <p className="text-xs text-gray-500">All information should be verified by the recipient and none is guaranteed as accurate by ARMLS.</p>
             <p className="text-xs text-gray-500 mt-1">Listings displayed may be from the ARMLS IDX program. Information source: ARMLS. Listing data last updated subject to availability.</p>

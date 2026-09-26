@@ -6,9 +6,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  ArrowLeft, Heart, Share2, Bed, Bath, Square, MapPin,
-  Calendar, Home as HomeIcon, Loader2, ChevronLeft, ChevronRight, X, Expand,
-  TrendingDown, Video, DollarSign, GraduationCap, Mountain, Eye,
+  ArrowLeft, Heart, Bed, Bath, Square, MapPin,
+  Calendar, Loader2, ChevronLeft, ChevronRight, X, Expand,
+  TrendingDown, Video, DollarSign, GraduationCap, Eye,
   Phone, MessageCircle, CalendarCheck
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -43,11 +43,36 @@ function calculateMonthlyPI(homePrice, downPaymentPct, ratePct, termYears) {
 function normalizeHoaToMonthly(fee, frequency) {
   if (!fee || fee <= 0) return 0;
   const freq = (frequency || '').toLowerCase();
+  // "Semi-Annually" also contains "annual", so it must be checked first.
+  if (freq.includes('semi')) return fee / 6;
   if (freq.includes('annual') || freq.includes('year')) return fee / 12;
   if (freq.includes('quarter')) return fee / 3;
-  if (freq.includes('semi')) return fee / 6;
   return fee;  // assume monthly if unspecified
 }
+
+// MLS frequency strings ("Semi-Annually", "Quarterly") → short display label.
+function formatHoaFrequency(frequency) {
+  const freq = (frequency || '').toLowerCase();
+  if (!freq) return '';
+  if (freq.includes('semi')) return 'twice a year';
+  if (freq.includes('annual') || freq.includes('year')) return 'per year';
+  if (freq.includes('quarter')) return 'per quarter';
+  if (freq.includes('month')) return 'per month';
+  return freq;
+}
+
+// "single_family" / "single family" → "Single Family"
+function formatPropertyType(type) {
+  if (!type) return '';
+  return type
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Beyond this many photos the dot row stops being a useful navigator and
+// just overflows the image; the "n / total" counter covers it instead.
+const MAX_GALLERY_DOTS = 12;
 
 export default function PropertyDetail() {
   const { user } = useAuth();
@@ -308,12 +333,12 @@ export default function PropertyDetail() {
   const formatPrice = (price) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
 
   return (
-    <div className="min-h-screen pb-12 bg-background">
+    <div className="min-h-screen pb-24 lg:pb-12 bg-background">
       {showLoginGate && <LoginGateModal onClose={() => setShowLoginGate(false)} />}
 
       {/* Back to search bar */}
       <div className="bg-white border-b border-border">
-        <div className="crandell-container py-4">
+        <div className="crandell-container py-1 md:py-4">
           <Link to={createPageUrl('Search')}>
             <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-4 w-4 mr-2" /> Back to Search
@@ -322,8 +347,8 @@ export default function PropertyDetail() {
         </div>
       </div>
 
-      <div className="crandell-container py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="crandell-container pt-0 pb-8 md:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
           <div className="lg:col-span-2 space-y-6">
 
             {/* ================================================================
@@ -333,9 +358,12 @@ export default function PropertyDetail() {
                 actually gets the visual weight a $XXX,000 listing deserves.
                 Mobile keeps the smaller height for vertical space efficiency.
                 ================================================================ */}
-            <Card className="overflow-hidden shadow-lg border-border">
+            <Card className="overflow-hidden shadow-lg border-border -mx-[calc(var(--crandell-page-padding)+2.5vw)] rounded-none border-x-0 sm:mx-0 sm:rounded-xl sm:border-x">
               <div
-                className="relative aspect-[4/3] bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="relative aspect-[4/3] bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary touch-pan-y"
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
                 role={images.length > 1 ? 'region' : undefined}
                 aria-roledescription={images.length > 1 ? 'carousel' : undefined}
                 aria-label={images.length > 1 ? 'Property image gallery' : undefined}
@@ -356,15 +384,16 @@ export default function PropertyDetail() {
                 />
                 {images.length > 1 && (
                   <>
-                    <button type="button" onClick={handlePrevImage} aria-label="Previous image" className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronLeft className="h-6 w-6 text-white" aria-hidden="true" /></button>
-                    <button type="button" onClick={handleNextImage} aria-label="Next image" className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronRight className="h-6 w-6 text-white" aria-hidden="true" /></button>
+                    <button type="button" onClick={handlePrevImage} aria-label="Previous image" className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronLeft className="h-6 w-6 text-white" aria-hidden="true" /></button>
+                    <button type="button" onClick={handleNextImage} aria-label="Next image" className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronRight className="h-6 w-6 text-white" aria-hidden="true" /></button>
                   </>
                 )}
                 <button type="button" onClick={() => user ? setIsFullscreen(true) : setShowLoginGate(true)} aria-label="View image fullscreen" className="absolute top-4 right-4 h-10 w-10 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><Expand className="h-5 w-5 text-white" aria-hidden="true" /></button>
                 {images.length > 1 && (
                   <>
                     <div className="absolute top-4 left-4 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-full text-white text-sm font-medium" aria-live="polite" aria-atomic="true"><span className="sr-only">Image </span>{currentImageIndex + 1} / {images.length}</div>
-                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2" role="tablist" aria-label="Choose image">
+                    {images.length <= MAX_GALLERY_DOTS && (
+                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 hidden sm:flex gap-2" role="tablist" aria-label="Choose image">
                       {images.map((_, idx) => (
                         <button
                           key={idx}
@@ -377,6 +406,7 @@ export default function PropertyDetail() {
                         />
                       ))}
                     </div>
+                    )}
                   </>
                 )}
               </div>
@@ -396,9 +426,9 @@ export default function PropertyDetail() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <MapPin className="h-5 w-5" />
-                      <span className="text-lg">{property.address}, {property.city}, {property.state} {property.zip_code}</span>
+                    <div className="flex items-start gap-2 text-muted-foreground">
+                      <MapPin className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                      <span className="text-base md:text-lg">{property.address}, {property.city}, {property.state} {property.zip_code}</span>
                     </div>
                     {property.subdivision && (
                       <Link
@@ -462,7 +492,10 @@ export default function PropertyDetail() {
                       {property.hoa_fee > 0 && (
                         <div className="bg-muted rounded-lg p-3">
                           <p className="text-xs text-muted-foreground mb-1">HOA Fee</p>
-                          <p className="font-semibold text-foreground">{formatPrice(property.hoa_fee)}{property.hoa_fee_frequency ? `/${property.hoa_fee_frequency.toLowerCase().replace('ly','')}` : ''}</p>
+                          <p className="font-semibold text-foreground">{formatPrice(property.hoa_fee)} <span className="font-normal text-sm text-muted-foreground">{formatHoaFrequency(property.hoa_fee_frequency)}</span></p>
+                          {property.hoa_fee_frequency && !property.hoa_fee_frequency.toLowerCase().includes('month') && (
+                            <p className="text-xs text-muted-foreground">≈ {formatPrice(Math.round(normalizeHoaToMonthly(property.hoa_fee, property.hoa_fee_frequency)))}/mo</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -504,7 +537,7 @@ export default function PropertyDetail() {
             <div className="sticky top-24 space-y-4">
 
               {/* CRANDELL CONTACT MODULE — the primary CTA */}
-              <Card className="border-2 border-primary shadow-lg">
+              <Card id="contact-agent" className="border-2 border-primary shadow-lg scroll-mt-24">
                 <CardContent className="p-6">
                   <div className="flex items-center gap-3 mb-4">
                     <img
@@ -533,7 +566,8 @@ export default function PropertyDetail() {
                   ) : (
                     <div className="space-y-2">
                       <Button
-                        className="w-full bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground font-semibold"
+                        variant="brand"
+                        className="w-full"
                         disabled={contactSubmitting}
                         onClick={() => handleCrandellContact('tour')}
                       >
@@ -545,8 +579,8 @@ export default function PropertyDetail() {
                         Schedule a Tour
                       </Button>
                       <Button
-                        variant="outline"
-                        className="w-full border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground"
+                        variant="brandOutline"
+                        className="w-full"
                         disabled={contactSubmitting}
                         onClick={() => handleCrandellContact('question')}
                       >
@@ -571,7 +605,7 @@ export default function PropertyDetail() {
                 <CardContent className="p-6 space-y-4">
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Property Type</p>
-                    <Badge className="bg-muted text-foreground border-0">{property.property_type?.replace(/_/g, ' ')}</Badge>
+                    <Badge className="bg-muted text-foreground border-0">{formatPropertyType(property.property_type)}</Badge>
                   </div>
                   {property.lot_size > 0 && <div><p className="text-sm text-muted-foreground mb-1">Lot Size</p><p className="font-semibold text-foreground">{property.lot_size} acres</p></div>}
                   {property.days_on_market > 0 && <div><p className="text-sm text-muted-foreground mb-1">Days on Market</p><p className="font-semibold text-foreground">{property.days_on_market} days</p></div>}
@@ -777,6 +811,52 @@ export default function PropertyDetail() {
         </div>
       )}
 
+      {/* ======================================================================
+          MOBILE ACTION BAR
+          ----------------------------------------------------------------------
+          On phones the contact card sits below the gallery, description and
+          specs — a long scroll away. This bar keeps Tour / Ask / Call one tap
+          away on every scroll position. Layout hides the rate ticker on this
+          page (phones only) so the two fixed bars don't stack.
+          ====================================================================== */}
+      <div
+        className="lg:hidden fixed inset-x-0 bottom-0 z-40 bg-white/95 backdrop-blur border-t border-border shadow-[0_-4px_12px_rgba(10,20,40,0.08)]"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        {contactSuccess ? (
+          <div className="px-4 py-4 text-sm text-center text-green-800 bg-green-50">
+            ✓ Got it. Tanner will reach out shortly.
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-4 py-3">
+            <a
+              href="tel:+14805441539"
+              aria-label="Call the Crandell Real Estate Team"
+              className="h-11 w-11 flex-shrink-0 rounded-[2px] border border-secondary text-secondary flex items-center justify-center"
+            >
+              <Phone className="h-5 w-5" />
+            </a>
+            <Button
+              variant="brandOutline"
+              className="flex-1 px-2"
+              disabled={contactSubmitting}
+              onClick={() => handleCrandellContact('question')}
+            >
+              Ask
+            </Button>
+            <Button
+              variant="brand"
+              className="flex-[2] px-2"
+              disabled={contactSubmitting}
+              onClick={() => handleCrandellContact('tour')}
+            >
+              {contactSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
+              Schedule Tour
+            </Button>
+          </div>
+        )}
+      </div>
+
       {user && property && (
         <AIAssistant user={user} contextData={{ currentProperty: { address: property.address, price: property.price, bedrooms: property.bedrooms, bathrooms: property.bathrooms } }} />
       )}
@@ -794,8 +874,8 @@ export default function PropertyDetail() {
             <img src={images[currentImageIndex]} alt={images.length > 1 ? `${property.address}, image ${currentImageIndex + 1} of ${images.length}` : property.address} decoding="async" className="w-full h-full object-contain" />
             {images.length > 1 && (
               <>
-                <button type="button" onClick={handlePrevImage} aria-label="Previous image" className="absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronLeft className="h-7 w-7 text-white" aria-hidden="true" /></button>
-                <button type="button" onClick={handleNextImage} aria-label="Next image" className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronRight className="h-7 w-7 text-white" aria-hidden="true" /></button>
+                <button type="button" onClick={handlePrevImage} aria-label="Previous image" className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronLeft className="h-7 w-7 text-white" aria-hidden="true" /></button>
+                <button type="button" onClick={handleNextImage} aria-label="Next image" className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronRight className="h-7 w-7 text-white" aria-hidden="true" /></button>
                 <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-white font-medium" aria-live="polite" aria-atomic="true"><span className="sr-only">Image </span>{currentImageIndex + 1} / {images.length}</div>
               </>
             )}

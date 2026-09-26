@@ -673,9 +673,12 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
       </div>
 
       {/* ====================================================================
-          CHIP ROW — primary filters as horizontal pills
+          CHIP ROW — primary filters as horizontal pills. On phones it's one
+          sideways-scrolling strip (bleeding to the screen edge) so results
+          start above the fold; desktop wraps. Overflow stays visible on
+          desktop because those chips open absolutely-positioned popovers.
           ==================================================================== */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <div className="flex flex-nowrap md:flex-wrap items-center gap-2 mb-3 overflow-x-auto md:overflow-visible scrollbar-none -mx-[calc(var(--crandell-page-padding)+2.5vw)] px-[calc(var(--crandell-page-padding)+2.5vw)] md:mx-0 md:px-0">
         <FilterChip label={statusLabel} isActive={!!filters.status}>
           {StatusPopover}
         </FilterChip>
@@ -735,7 +738,7 @@ export default function SearchFilters({ onFilterChange, initialFilters = {} }) {
         {hasAnyFilter && (
           <button
             onClick={clearFilters}
-            className="ml-auto text-sm text-muted-foreground hover:text-destructive underline transition-colors"
+            className="md:ml-auto flex-shrink-0 whitespace-nowrap px-2 text-sm text-muted-foreground hover:text-destructive underline transition-colors"
           >
             Clear all
           </button>

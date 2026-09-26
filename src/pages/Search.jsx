@@ -190,7 +190,6 @@ export default function Search() {
   const [viewMode, setViewMode] = useState(session?.viewMode || 'grid');
   const [comparePropertyIds, setComparePropertyIds] = useState([]);
   const [currentPage, setCurrentPage] = useState(session?.currentPage || 1);
-  const [totalCount, setTotalCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullStartY, setPullStartY] = useState(0);
   const [sortBy, setSortBy] = useState(session?.sortBy || 'distance');
@@ -283,7 +282,6 @@ export default function Search() {
           .sort((a, b) => a._distance - b._distance);
         const noCoords = (data || []).filter(p => !p.latitude || !p.longitude);
         const sorted = [...withDistance, ...noCoords];
-        setTotalCount(sorted.length);
         return sorted.slice(0, PAGE_SIZE);
       }
 
@@ -294,17 +292,28 @@ export default function Search() {
       const { data, error } = await query;
       if (error) throw error;
 
-      if (currentPage === 1) {
-        if ((data || []).length < PAGE_SIZE) {
-          setTotalCount((data || []).length);
-        } else {
-          setTotalCount(PAGE_SIZE + 1);
-        }
-      }
-
       return data || [];
     },
   });
+
+  // Exact number of matching homes for the results heading. A head-only
+  // count query is cheap, and "30,713 homes" tells buyers far more than the
+  // old "50+". Kept separate from the grid query so paging and sorting don't
+  // re-count.
+  const { data: matchCount = null } = useQuery({
+    queryKey: ['propertiesCount', filters, gridBoundsActive ? mapBounds : null],
+    queryFn: async () => {
+      let query = supabase.from('properties').select('id', { count: 'exact', head: true });
+      query = applyFiltersToQuery(query, filters);
+      if (gridBoundsActive) query = applyBoundsToQuery(query, mapBounds);
+      const { count, error } = await query;
+      if (error) throw error;
+      return count ?? 0;
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+  const totalPages = matchCount != null ? Math.max(1, Math.ceil(matchCount / PAGE_SIZE)) : null;
 
   // ============================================================================
   // MAP QUERY — lite property data (just enough for pins + popups)
@@ -538,12 +547,12 @@ export default function Search() {
       )}
 
       <div
-        className="crandell-container py-8"
+        className="crandell-container py-4 md:py-8"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
           {/* Filter chips — full-width row above the results */}
           <SearchFilters key={filtersResetKey} onFilterChange={handleFilterChange} initialFilters={filters} />
 
@@ -554,12 +563,14 @@ export default function Search() {
               onDismiss={dismissLocation}
             />
 
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-normal text-foreground">
+            <div className="mb-4 md:mb-6 flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-3 md:gap-4">
+              <div className="min-w-0">
+                <h2 className="text-xl md:text-2xl font-normal text-foreground">
                   {viewMode === 'map'
                     ? `${mapProperties.length.toLocaleString()} ${mapProperties.length === 1 ? 'Home' : 'Homes'} on Map`
-                    : `${totalCount > PAGE_SIZE ? `${PAGE_SIZE}+` : totalCount} ${totalCount === 1 ? 'Home' : 'Homes'} Available`
+                    : matchCount == null
+                      ? 'Homes Available'
+                      : `${matchCount.toLocaleString()} ${matchCount === 1 ? 'Home' : 'Homes'} Available`
                   }
                 </h2>
                 {(filters.city || filters.cities_label) && (
@@ -569,8 +580,8 @@ export default function Search() {
                 )}
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 md:gap-3 min-w-0">
+                <div className="flex items-center gap-2 flex-1 md:flex-none min-w-0">
                   <label htmlFor="sort-select" className="text-sm text-muted-foreground whitespace-nowrap">
                     Sort:
                   </label>
@@ -578,7 +589,7 @@ export default function Search() {
                     id="sort-select"
                     value={sortBy}
                     onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}
-                    className="text-sm border border-border rounded-md px-3 py-1.5 bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="flex-1 md:flex-none min-w-0 h-11 md:h-9 text-sm border border-border rounded-md px-3 bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     {sortOptions.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -591,7 +602,7 @@ export default function Search() {
                     whatever's currently in the map viewport, so panning the
                     map updates both panels in sync. */}
                 {viewMode === 'map' && (
-                  <label className="flex items-center gap-2 text-sm text-foreground select-none cursor-pointer whitespace-nowrap">
+                  <label className="order-last md:order-none w-full md:w-auto flex items-center gap-2 text-sm text-foreground select-none cursor-pointer whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={lockToBounds}
@@ -602,24 +613,28 @@ export default function Search() {
                   </label>
                 )}
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-shrink-0" role="group" aria-label="Results view">
                   <Button
                     variant={viewMode === 'grid' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setViewMode('grid')}
+                    aria-pressed={viewMode === 'grid'}
+                    aria-label="Grid view"
                     className={`select-none ${viewMode === 'grid' ? 'bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground' : ''}`}
                   >
-                    <Grid3x3 className="h-4 w-4 mr-2" />
-                    Grid
+                    <Grid3x3 className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Grid</span>
                   </Button>
                   <Button
                     variant={viewMode === 'map' ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setViewMode('map')}
+                    aria-pressed={viewMode === 'map'}
+                    aria-label="Map view"
                     className={`select-none ${viewMode === 'map' ? 'bg-primary hover:bg-[var(--crandell-primary-hover)] text-primary-foreground' : ''}`}
                   >
-                    <Map className="h-4 w-4 mr-2" />
-                    Map
+                    <Map className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Map</span>
                   </Button>
                 </div>
               </div>
@@ -676,7 +691,7 @@ export default function Search() {
                   ))}
                 </div>
 
-                {properties.length >= PAGE_SIZE && (
+                {(currentPage > 1 || properties.length >= PAGE_SIZE) && (
                   <div className="mt-8 flex items-center justify-center gap-4">
                     <Button
                       variant="outline"
@@ -688,12 +703,12 @@ export default function Search() {
                       Previous
                     </Button>
                     <span className="text-foreground font-medium">
-                      Page {currentPage}
+                      Page {currentPage}{totalPages ? ` of ${totalPages.toLocaleString()}` : ''}
                     </span>
                     <Button
                       variant="outline"
                       onClick={() => { setCurrentPage(prev => prev + 1); window.scrollTo(0, 0); }}
-                      disabled={properties.length < PAGE_SIZE}
+                      disabled={properties.length < PAGE_SIZE || (totalPages != null && currentPage >= totalPages)}
                       className="flex items-center gap-2 select-none"
                     >
                       Next

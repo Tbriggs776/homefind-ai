@@ -260,4 +260,13 @@
     margin-inline: auto;
     padding-inline: var(--crandell-page-padding);
   }
+
+  /* Horizontal chip rows on mobile scroll sideways; hide the scrollbar so
+     the row reads as a strip of pills rather than a scroll widget. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
