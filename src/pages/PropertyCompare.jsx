@@ -10,6 +10,7 @@ import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import ReactMarkdown from 'react-markdown';
 import EmptyState from '../components/EmptyState';
+import { listingPhotoProps, PHOTO_PLACEHOLDER } from '@/lib/listingPhotos';
 
 export default function PropertyCompare() {
   const { user, isAuthenticated, isLoadingAuth } = useAuth();
@@ -132,7 +133,7 @@ export default function PropertyCompare() {
           {properties.map((property, idx) => (
             <Card key={property.id} className="overflow-hidden shadow-lg border-slate-200">
               <div className="relative aspect-[3/2] bg-muted">
-                <img src={property.images?.[0] || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80'} alt={property.address} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                <img {...listingPhotoProps(property.images?.[0] || property.primary_photo_url || PHOTO_PLACEHOLDER, 'card', ['thumb', 'card'])} sizes="(min-width: 1024px) 25vw, (min-width: 768px) 50vw, 100vw" alt={property.address} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 <div className="absolute top-3 left-3"><Badge className="bg-slate-800 text-white">Property {idx + 1}</Badge></div>
               </div>
               <CardContent className="p-6 space-y-6">

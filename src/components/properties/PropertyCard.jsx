@@ -7,8 +7,12 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import LoginGateModal from '@/components/LoginGateModal';
 import ShareButton from '@/components/properties/ShareButton';
+import { listingPhotoProps, preloadPhotos, PHOTO_PLACEHOLDER, HIGH_FETCH_PRIORITY } from '@/lib/listingPhotos';
 
-export default function PropertyCard({ property, onFavorite, isFavorited, onCompare, isComparing, user }) {
+// Cards render 1-up on phones, 2-up from sm, 3-up from lg.
+const CARD_SIZES = '(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw';
+
+export default function PropertyCard({ property, onFavorite, isFavorited, onCompare, isComparing, user, priority = false }) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showLoginGate, setShowLoginGate] = useState(false);
 
@@ -32,7 +36,12 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
 
   const images = property.images?.length > 0
     ? property.images
-    : ['https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80'];
+    : [property.primary_photo_url || PHOTO_PLACEHOLDER];
+
+  // Warm the next photo(s) so the carousel arrow doesn't wait on the network.
+  const preloadAhead = (fromIndex) => {
+    if (images.length > 1) preloadPhotos([images[(fromIndex + 1) % images.length]], 'card');
+  };
 
   const handlePrevImage = (e) => {
     e.preventDefault();
@@ -43,7 +52,11 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
   const handleNextImage = (e) => {
     e.preventDefault();
     if (!user) { setShowLoginGate(true); return; }
-    setCurrentImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    setCurrentImageIndex((prev) => {
+      const next = prev === images.length - 1 ? 0 : prev + 1;
+      preloadAhead(next);
+      return next;
+    });
   };
 
   return (
@@ -56,15 +69,19 @@ export default function PropertyCard({ property, onFavorite, isFavorited, onComp
       <Card className={`overflow-hidden hover:shadow-xl transition-all duration-300 bg-white group ${isComparing ? 'ring-2 ring-primary' : 'border-border'}`}>
         <Link to={createPageUrl('PropertyDetail') + `?id=${property.id}`}>
           <div
+            onMouseEnter={() => preloadAhead(currentImageIndex)}
             className="relative aspect-[3/2] bg-muted overflow-hidden"
             role={images.length > 1 ? 'region' : undefined}
             aria-roledescription={images.length > 1 ? 'carousel' : undefined}
             aria-label={images.length > 1 ? `${property.address} — image ${currentImageIndex + 1} of ${images.length}` : undefined}
           >
             <img
-              src={images[currentImageIndex]}
+              key={images[currentImageIndex]}
+              {...listingPhotoProps(images[currentImageIndex], 'card', ['thumb', 'card', 'large'])}
+              sizes={CARD_SIZES}
               alt={images.length > 1 ? `${property.address}, image ${currentImageIndex + 1} of ${images.length}` : property.address}
-              loading="lazy"
+              loading={priority ? 'eager' : 'lazy'}
+              {...(priority ? HIGH_FETCH_PRIORITY : {})}
               decoding="async"
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
             />

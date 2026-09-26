@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import { Button } from '@/components/ui/button';
 import { Bed, Bath, Square, MapPin, Maximize2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import { listingPhotoProps } from '@/lib/listingPhotos';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -245,12 +246,14 @@ export default function PropertyMap({ properties, mapProperties, onFavorite, sav
               >
                 <Popup>
                   <div className="w-[280px]">
-                    {property.images?.[0] && (
+                    {(property.primary_photo_url || property.images?.[0]) && (
                       <img
-                        src={property.images[0]}
+                        {...listingPhotoProps(property.primary_photo_url || property.images[0], 'thumb', ['thumb', 'card'])}
+                        sizes="280px"
                         alt={property.address}
                         className="w-full h-40 object-cover"
                         loading="lazy"
+                        decoding="async"
                       />
                     )}
                     <div className="p-3">

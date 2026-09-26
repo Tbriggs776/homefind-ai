@@ -22,6 +22,7 @@ import LoginGateModal from '../components/LoginGateModal';
 import ShareButton from '../components/properties/ShareButton';
 import PropertyCard from '../components/properties/PropertyCard';
 import PropertyDetailSkeleton from '../components/properties/PropertyDetailSkeleton';
+import { listingPhotoProps, preloadPhotos, PHOTO_PLACEHOLDER, HIGH_FETCH_PRIORITY } from '@/lib/listingPhotos';
 
 // ============================================================================
 // MORTGAGE PAYMENT CALCULATION
@@ -238,7 +239,16 @@ export default function PropertyDetail() {
 
   const images = property?.images?.length > 0
     ? property.images
-    : ['https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1200&q=80'];
+    : [property?.primary_photo_url || PHOTO_PLACEHOLDER];
+
+  // Preload the neighbours of the current photo so next/prev/swipe is instant.
+  useEffect(() => {
+    if (images.length < 2) return;
+    const next = images[(currentImageIndex + 1) % images.length];
+    const prev = images[(currentImageIndex - 1 + images.length) % images.length];
+    preloadPhotos([next, prev], isFullscreen ? 'xl' : 'large');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentImageIndex, isFullscreen, property?.id]);
 
   const handleImageChange = (index) => {
     setCurrentImageIndex(index);
@@ -393,10 +403,12 @@ export default function PropertyDetail() {
                 }}
               >
                 <img
-                  src={images[currentImageIndex]}
+                  key={images[currentImageIndex]}
+                  {...listingPhotoProps(images[currentImageIndex], 'large', ['card', 'large', 'xl'])}
+                  sizes="(min-width: 1024px) 66vw, 100vw"
                   alt={images.length > 1 ? `${property.address}, image ${currentImageIndex + 1} of ${images.length}` : property.address}
                   loading="eager"
-                  fetchPriority="high"
+                  {...HIGH_FETCH_PRIORITY}
                   decoding="async"
                   className="w-full h-full object-cover"
                 />
@@ -921,7 +933,7 @@ export default function PropertyDetail() {
         >
           <button type="button" onClick={() => setIsFullscreen(false)} aria-label="Close fullscreen" className="absolute top-4 right-4 h-12 w-12 bg-black/90 hover:bg-black backdrop-blur-sm rounded-full flex items-center justify-center z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><X className="h-6 w-6 text-white" aria-hidden="true" /></button>
           <div className="relative w-full h-full flex items-center justify-center p-4" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-            <img src={images[currentImageIndex]} alt={images.length > 1 ? `${property.address}, image ${currentImageIndex + 1} of ${images.length}` : property.address} decoding="async" className="w-full h-full object-contain" />
+            <img key={images[currentImageIndex]} {...listingPhotoProps(images[currentImageIndex], 'xl')} alt={images.length > 1 ? `${property.address}, image ${currentImageIndex + 1} of ${images.length}` : property.address} decoding="async" className="w-full h-full object-contain" />
             {images.length > 1 && (
               <>
                 <button type="button" onClick={handlePrevImage} aria-label="Previous image" className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"><ChevronLeft className="h-7 w-7 text-white" aria-hidden="true" /></button>

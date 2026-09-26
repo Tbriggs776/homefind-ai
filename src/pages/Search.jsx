@@ -334,7 +334,7 @@ export default function Search() {
     queryFn: async () => {
       let query = supabase
         .from('properties')
-        .select('id, latitude, longitude, price, address, city, state, zip_code, bedrooms, bathrooms, square_feet, images, cross_street');
+        .select('id, latitude, longitude, price, address, city, state, zip_code, bedrooms, bathrooms, square_feet, primary_photo_url, cross_street');
 
       query = applyFiltersToQuery(query, filters);
       if (mapBounds) {
@@ -678,9 +678,10 @@ export default function Search() {
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {properties.map(property => (
+                  {properties.map((property, index) => (
                     <PropertyCard
                       key={property.id}
+                      priority={index < 3}
                       property={property}
                       onFavorite={handleFavorite}
                       isFavorited={savedPropertyIds.includes(property.id)}

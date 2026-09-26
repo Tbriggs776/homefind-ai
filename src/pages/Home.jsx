@@ -8,6 +8,7 @@ import { createPageUrl } from '../utils';
 import PropertyCard from '../components/properties/PropertyCard';
 import { PropertyCardSkeletonGrid } from '../components/properties/PropertyCardSkeleton';
 import RecentlyViewed from '../components/home/RecentlyViewed';
+import { HIGH_FETCH_PRIORITY } from '@/lib/listingPhotos';
 
 // Quick-filter chips for the East Valley cities Crandell specializes in.
 // Social proof carried over from crandellrealestate.com so the search app
@@ -173,7 +174,7 @@ export default function Home() {
             src="/hero-home.jpg"
             alt="Luxury Arizona home at sunset"
             loading="eager"
-            fetchPriority="high"
+            {...HIGH_FETCH_PRIORITY}
             decoding="async"
             className="absolute inset-0 w-full h-full object-cover"
           />
